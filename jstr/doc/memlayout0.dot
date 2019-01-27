@@ -1,0 +1,7 @@
+digraph G {
+
+graph [ rankdir=BT ]
+
+json [ shape=record label="{{\{|\"|n|a|m|e|\"|:|\"|r|o|o|t|\"|,|\"|i|d|\"|:|0|\}|\\0}}" ]
+
+}

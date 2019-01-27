@@ -1,0 +1,12 @@
+; DO NOT EDIT (unless you know what you are doing)
+;
+; This subdirectory is a git "subrepo", and this file is maintained by the
+; git-subrepo command. See https://github.com/git-commands/git-subrepo#readme
+;
+[subrepo]
+	remote = https://github.com/all-things-interactive/jstr.git
+	branch = master
+	commit = 955c3d878548464dc9b996c827fb514179111e82
+	parent = 2e3d18b7e0556d40b5f301a3305528cec58caa40
+	method = merge
+	cmdver = 0.4.0

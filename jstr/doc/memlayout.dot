@@ -1,0 +1,16 @@
+digraph G {
+
+graph [ rankdir=BT ]
+
+json [ shape=record label="{\{|?}|{\"|?}|{n|<name>n}|{a|a}|{m|m}|{e|e}|{\"|\\0}|{:|?}|{\"|?}|{r|<root>r}|{o|o}|{o|o}|{t|t}|{\"|\\0}|{,|?}|{\"|?}|{i|<id>i}|{d|d}|{\"|\\0}|{:|?}|{0|<0>0}|{\}|\\0}|{\\0|?}"]
+
+
+token [ shape=record label="{{<_>OBJECT|<name>STRING|<root>STRING|<id>STRING|<0>NUMBER|<end>}}"]
+
+token:name->json:name
+token:root->json:root
+token:id->json:id
+token:0->json:0
+token:_->token:end [ label="next()"]
+
+}
