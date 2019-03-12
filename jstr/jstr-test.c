@@ -6,7 +6,7 @@
 
 static const char *jstr_type_to_str(jstr_type_t t) {
     static const char* types[] = {
-       "STRING", "NUMBER", "OBJECT", "ARRAY", "TRUE", "FALSE", "NULL"
+       "OBJECT", "ARRAY", "STRING", "NUMBER", "TRUE", "FALSE", "NULL"
     };
     if (!(t&0x7f) || (t&(t-1))) return "<ERROR>";
     return types[__builtin_ctzl(t)];
@@ -54,11 +54,11 @@ static void test(int lineno, const char *json, ssize_t rc_expected, ... ) {
             }
             if (type_expected&(JSTR_ARRAY|JSTR_OBJECT)) {
                 size_t offset_expected = va_arg(ap, size_t);
-                if (type_match && jstr__offset(token+i) != offset_expected) {
+                if (type_match && (token+i)->value__ != offset_expected) {
                     fprintf(
                         stderr, "@%04d: [%03zu] %6s (expected) %zu != %zu\n",
                         lineno, i, jstr_type_to_str(type_expected),
-                        offset_expected, jstr__offset(token + i)
+                        offset_expected, (token + i)->value__
                     );
                 }
             } else {
@@ -80,6 +80,15 @@ static void test(int lineno, const char *json, ssize_t rc_expected, ... ) {
 }
 
 int main() {
+
+    // jstr_type_to_str tests
+    test("\"OBJECT\"", 8, JSTR_STRING, jstr_type_to_str(JSTR_OBJECT), 0);
+    test("\"ARRAY\"", 7, JSTR_STRING, jstr_type_to_str(JSTR_ARRAY), 0);
+    test("\"STRING\"", 8, JSTR_STRING, jstr_type_to_str(JSTR_STRING), 0);
+    test("\"NUMBER\"", 8, JSTR_STRING, jstr_type_to_str(JSTR_NUMBER), 0);
+    test("\"TRUE\"", 6, JSTR_STRING, jstr_type_to_str(JSTR_TRUE), 0);
+    test("\"FALSE\"", 7, JSTR_STRING, jstr_type_to_str(JSTR_FALSE), 0);
+    test("\"NULL\"", 6, JSTR_STRING, jstr_type_to_str(JSTR_NULL), 0);
 
     test("", JSTR_INVAL);
     test("   ", JSTR_INVAL);

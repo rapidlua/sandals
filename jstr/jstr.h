@@ -13,48 +13,22 @@ typedef enum {
     JSTR_NULL   = 0x40
 } jstr_type_t;
 
-#ifndef JSTR_TOKEN_COMPRESSED
-#if __x86_64__
-#define JSTR_TOKEN_COMPRESSED 1
-#endif
-#endif
-
 typedef struct {
-#if JSTR_TOKEN_COMPRESSED
-    uintptr_t type_and_value__;
-#else
     jstr_type_t type__;
     uintptr_t value__;
-#endif
 } jstr_token_t;
 
 static inline jstr_type_t jstr_type(const jstr_token_t *token) {
-#if JSTR_TOKEN_COMPRESSED
-    return 0xff & token->type_and_value__;
-#else
     return token->type__;
-#endif
 }
 
 static inline const char *jstr_value(const jstr_token_t *token) {
-#if JSTR_TOKEN_COMPRESSED
-    return (const char *)(token->type_and_value__ >> 8);
-#else
     return (const char *)token->value__;
-#endif
-}
-
-static inline size_t jstr__offset(const jstr_token_t *token) {
-#if JSTR_TOKEN_COMPRESSED
-    return token->type_and_value__ >> 8;
-#else
-    return token->value__;
-#endif
 }
 
 static inline const jstr_token_t *jstr_next(const jstr_token_t *token) {
-    return token + ((jstr_type(token)&(JSTR_OBJECT|JSTR_ARRAY)) ?
-        jstr__offset(token) : 1);
+    return token + ((token->type__&(JSTR_OBJECT|JSTR_ARRAY)) ?
+        token->value__ : 1);
 }
 
 typedef struct {
@@ -72,7 +46,6 @@ static inline void jstr_init(jstr_parser_t *parser) {
 enum {
     JSTR_INVAL = -1, // parse error
     JSTR_NOMEM = -2, // token array too small
-    JSTR_2BIG  = -3  // not enough bits in token to store pointer/offset
 };
 
 ssize_t jstr_parse(

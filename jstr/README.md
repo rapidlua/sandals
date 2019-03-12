@@ -89,8 +89,6 @@ return value indicates a failure. Possible failures:
 `JSTR_NOMEM (-2)` Token array is too small. Grow the array. Resume
 the parser by calling `jstr_parse` again.
 
-`JSTR_2BIG  (-3)` String is too large or too many tokens produced.
-
 ### Tokens
 
 Token is an opaque `jstr_token_t` structure. No cleanup is necessary.

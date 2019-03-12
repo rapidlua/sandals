@@ -3,12 +3,8 @@
 static inline void token_init(
     jstr_token_t *token, jstr_type_t type, uintptr_t value
 ) {
-#if JSTR_TOKEN_COMPRESSED
-    token->type_and_value__ = value<<8 | type;
-#else
     token->type__ = type;
     token->value__ = value;
-#endif
 }
 
 // > 0: success, end pos
@@ -28,9 +24,6 @@ ssize_t jstr_parse(
     enum {
         TOP, OBJECT_VALUE = JSTR_OBJECT, ARRAY_ITEM = JSTR_ARRAY, OBJECT_KEY
     } cs = token_parent == token_cur ? TOP : jstr_type(token_parent);
-#if JSTR_TOKEN_COMPRESSED
-    if (((uintptr_t)-1>>8) <= token_count) return JSTR_2BIG;
-#endif
 parse_generic:
     if (token_end - token_cur < 2) {
         parser->parse_pos = (char *)p-str;
@@ -193,9 +186,6 @@ commit_token: {
         switch (cs) {
         case TOP:
             if (c) return JSTR_INVAL;
-#if JSTR_TOKEN_COMPRESSED
-            if ((uintptr_t)p > ((uintptr_t)-1>>8)) return JSTR_2BIG;
-#endif
             return (char *)p-str-1;
         case OBJECT_KEY:
             if (c != ':') return JSTR_INVAL;
@@ -214,9 +204,8 @@ commit_token: {
 
 pop_context: {
         jstr_token_t *token_grandparent = token_parent
-            - jstr__offset(token_parent);
-        token_init(
-            token_parent, jstr_type(token_parent), token_cur-token_parent);
+            - token_parent->value__;
+        token_parent->value__ = token_cur-token_parent;
         cs = token_parent == token_grandparent
             ? TOP : jstr_type(token_grandparent);
         token_parent = token_grandparent;
