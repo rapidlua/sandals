@@ -321,6 +321,7 @@ int parse_command(struct sandbozo_command *cmd, char *request, size_t size) {
         if ((dest = match_key(key,
                     "workDir",  &cmd->work_dir,
                     "statusFifo",  &cmd->status_fifo,
+                    "pids.max", &cmd->pids_max,
                     NULL))) {
             if (jstr_type(tok+1)!=JSTR_STRING) {
                 report_failure(

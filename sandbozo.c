@@ -289,7 +289,10 @@ static void run_server(
     while ((size = read_request(&request))) {
 
         const char *env_default[] = { NULL };
-        struct sandbozo_command cmd = { .env = env_default, .work_dir = "/" };
+        struct sandbozo_command cmd = {
+            .env = env_default, .work_dir = "/",
+            .pids_max = cgroup_ctx->conf_pidsmax
+        };
         pid_t pid, child_pid;
         int status;
 
@@ -303,7 +306,7 @@ static void run_server(
         // pids.max <- value-for-pids-max
         write_checked(
             cgroup_ctx->pidsmax_fd,
-            cgroup_ctx->conf_pidsmax, strlen(cgroup_ctx->conf_pidsmax),
+            cmd.pids_max, strlen(cmd.pids_max),
             "pids.max");
 
         *exec_errno = 0;

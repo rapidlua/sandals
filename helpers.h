@@ -43,6 +43,7 @@ struct sandbozo_command {
     struct timespec time_limit;
     const char *status_fifo;
     const jstr_token_t *pipes;
+    const char *pids_max;
 };
 
 extern const char kPipesKey[]; // = "pipes"
