@@ -13,14 +13,14 @@
 #include <string.h>
 #include <unistd.h>
 
-const char kStatusExited[]              = "sys.exited";
-const char kStatusKilled[]              = "sys.killed";
-const char kStatusTimeLimit[]           = "sys.time.limit";
-const char kStatusPipeLimit[]           = "sys.pipe.limit";
-const char kStatusInternalError[]       = "sys.internalerror";
-const char kStatusRequestInvalid[]      = "sys.request.invalid";
-const char kStatusResponseTooBig[]      = "sys.response.toobig";
-const char kStatusCustomStatusInvalid[] = "sys.customstatus.invalid";
+const char kStatusExited[]         = "sys.exited";
+const char kStatusKilled[]         = "sys.killed";
+const char kStatusTimeLimit[]      = "sys.time.limit";
+const char kStatusPipeLimit[]      = "sys.pipe.limit";
+const char kStatusInternalError[]  = "sys.internalerror";
+const char kStatusRequestInvalid[] = "sys.request.invalid";
+const char kStatusResponseTooBig[] = "sys.response.toobig";
+const char kStatusStatusInvalid[]  = "sys.status.invalid";
 
 static char response[RESPONSE_MAX+6];
 static char *response_end = response;
@@ -58,7 +58,7 @@ void write_response_int(int i) {
 void send_response() {
     if (response_end > response+RESPONSE_MAX) {
         reset_response();
-        report_failure(kStatusResponseTooBig, NULL);
+        return report_failure(kStatusResponseTooBig, NULL);
     }
     char *p = response;
     while (p != response_end) {
@@ -96,7 +96,6 @@ void report_failure(const char *status, const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
     vreport_failure(status, fmt, ap);
-    va_end(ap);
 }
 
 void report_failure_and_exit(const char *status, const char *fmt, ...) {
@@ -171,7 +170,6 @@ char *copy_request(const char *request, size_t size) {
     return memcpy(buf, request, size);
 }
 
-// Returns NULL on EOF
 static jstr_token_t *parse_request(char *request, size_t size) {
     enum { TOKEN_MIN = 64 };
     static jstr_token_t *token;

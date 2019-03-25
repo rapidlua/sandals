@@ -29,10 +29,10 @@
 
 static void configure_net(const struct sandbozo_config *conf) {
 
-    // bring lo interface up
     int s;
     struct ifreq ifr = { .ifr_name = "lo"};
 
+    // bring lo interface up
     if ((s = socket(AF_INET, SOCK_STREAM|SOCK_CLOEXEC, 0)) == -1)
         report_failure_and_exit(kStatusInternalError,
             "socket: %s", strerror(errno));
@@ -57,7 +57,7 @@ static void configure_net(const struct sandbozo_config *conf) {
 
 static int open_checked(const char *path, int flags) {
     int fd;
-    if ((fd = open(path, flags)) == -1)
+    if ((fd = open(path, flags|O_NOCTTY)) == -1)
         report_failure_and_exit(kStatusInternalError,
             "open('%s'): %s", path, strerror(errno));
     return fd;
@@ -91,11 +91,12 @@ struct map_user_and_group_ctx {
 
 static const char kProcSelfUidmapPath[] = "/proc/self/uid_map";
 static const char kProcSelfGidmapPath[] = "/proc/self/gid_map";
-static const char kProcSelfSetgroupsPath[] = "/proc/self/setgroups";
 
 static void map_user_and_group_begin(
     struct map_user_and_group_ctx *ctx
 ) {
+    static const char kProcSelfSetgroupsPath[] = "/proc/self/setgroups";
+
     ctx->procselfuidmap_fd = open_checked(kProcSelfUidmapPath, O_WRONLY|O_CLOEXEC);
     ctx->procselfgidmap_fd = open_checked(kProcSelfGidmapPath, O_WRONLY|O_CLOEXEC);
 
@@ -131,17 +132,19 @@ static void map_user_and_group_complete(
         gid = gr->gr_gid;
     }
 
-    close(
-        write_checked(
-            ctx->procselfuidmap_fd,
-            buf, sprintf(buf, "%d %d 1", (int)uid, (int)proc_uid),
-            kProcSelfUidmapPath));
+    write_checked(
+        ctx->procselfuidmap_fd,
+        buf, sprintf(buf, "%d %d 1", (int)uid, (int)proc_uid),
+        kProcSelfUidmapPath);
 
-    close(
-        write_checked(
-            ctx->procselfgidmap_fd,
-            buf, sprintf(buf, "%d %d 1", (int)gid, (int)proc_gid),
-            kProcSelfGidmapPath));
+    close(ctx->procselfuidmap_fd);
+
+    write_checked(
+        ctx->procselfgidmap_fd,
+        buf, sprintf(buf, "%d %d 1", (int)gid, (int)proc_gid),
+        kProcSelfGidmapPath);
+
+    close(ctx->procselfgidmap_fd);
 }
 
 static void chroot_relative(
@@ -149,11 +152,10 @@ static void chroot_relative(
     char buf[PATH_MAX]
 ) {
     size_t len = strlen(conf->chroot);
-    int rc;
     while (len && conf->chroot[len-1]=='/') --len;
     while (*path=='/') ++path;
 
-    if (SIZE_MAX <= (size_t)snprintf(
+    if (PATH_MAX <= (size_t)snprintf(
         buf, PATH_MAX, "%.*s/%s", (int)len, conf->chroot, path))
         report_failure_and_exit(kStatusInternalError, "Path too long");
 }
@@ -220,7 +222,7 @@ struct cgroup_ctx {
     char conf_pidsmax[32];
 };
 
-static void run_server(
+static void run_spawner(
     const struct sandbozo_config *conf,
     const struct cgroup_ctx *cgroup_ctx
 ) {
@@ -237,9 +239,7 @@ static void run_server(
         "personality: %s", strerror(errno));
 
     // open /dev/null, strictly before chroot
-    if ((devnull_fd = open("/dev/null", O_CLOEXEC|O_RDWR)) == -1)
-        report_failure_and_exit(kStatusInternalError,
-            "open('/dev/null'): %s", strerror(errno));
+    devnull_fd = open_checked("/dev/null", O_CLOEXEC|O_RDWR);
 
     // grab shared memory page for exec_errno
     exec_errno = mmap(
@@ -298,7 +298,7 @@ static void run_server(
 
         if (parse_command(&cmd, request, size) == -1) continue;
 
-        if (chdir(cmd.work_dir)) {
+        if (chdir(cmd.work_dir) == -1) {
             report_failure(kStatusInternalError, "chdir: %s", strerror(errno));
             continue;
         }
@@ -335,6 +335,9 @@ static void run_server(
         }
 
         // kill remaining child processes
+        // Assume CAP_KILL is held so that even if SUID binary sneaks in
+        // we are able to kill a process spawned from it.
+
         // pids.max <- 0 to avoid fork vs. kill race
         write_checked(cgroup_ctx->pidsmax_fd, "0", 1, "pids.max");
 
@@ -371,9 +374,9 @@ static void run_server(
 // implement cleanup in a global destructor.
 //
 // Note: it is quite natural that the destructor is enabled by
-// server_pid value, since only the parent process should perform the
+// spawner_pid value, since only the Manager process should perform the
 // cleanup.
-static pid_t server_pid;
+static pid_t spawner_pid;
 static char cgroup_path[PATH_MAX];
 static int cgroupevents_fd; // "cgroup.events"
 
@@ -384,13 +387,13 @@ void cleanup_cgroup() {
         .fd = cgroupevents_fd,
         .events = POLLPRI
     };
-    if (!server_pid) return;
-    if (server_pid != -1) kill(server_pid, SIGKILL);
+    if (!spawner_pid) return;
+    if (spawner_pid != -1) kill(spawner_pid, SIGKILL);
     // wait for cgroup to be vacated and remove it
     while (rmdir(cgroup_path)==-1 && errno==EBUSY) {
         // read resets internal 'updates pending' flag;
         // without read poll will be returning immediately
-        if (read(cgroupevents_fd, buf, sizeof buf) == -1) return;
+        if (pread(cgroupevents_fd, buf, sizeof buf, 0) == -1) return;
         poll(&pollfd, 1, INT_MAX);
     }
 }
@@ -439,8 +442,8 @@ static void create_cgroup(
             "Creating '%s': %s", cgroup_path, strerror(errno));
 
     // enable cleanup_cgroup() destructor
-    assert(!server_pid);
-    server_pid = -1;
+    assert(!spawner_pid);
+    spawner_pid = -1;
 
     // ensure we can safely append any of cgroup.procs, pids.max or
     // cgroup.events suffixes
@@ -495,18 +498,20 @@ static inline int myclone(int flags) {
 }
 
 static void close_stray_fds() {
-    static const char path[] = "/proc/self/fd";
+    static const char kProcSelfFdPath[] = "/proc/self/fd";
     DIR *dir;
     struct dirent *dirent;
-    if (!(dir = opendir(path))) report_failure_and_exit(
-        kStatusInternalError, "opendir(%s): %s", path, strerror(errno));
+    if (!(dir = opendir(kProcSelfFdPath))) report_failure_and_exit(
+        kStatusInternalError, "opendir(%s): %s",
+        kProcSelfFdPath, strerror(errno));
     while (errno = 0, (dirent = readdir(dir))) {
         // parsing non-numeric entries yields fd=0, which is fine
         int fd = strtol(dirent->d_name, NULL, 0);
         if (fd > STDERR_FILENO && fd != dirfd(dir)) close(fd);
     }
     if (errno) report_failure_and_exit(
-        kStatusInternalError, "readdir(%s): %s", path, strerror(errno));
+        kStatusInternalError, "readdir(%s): %s",
+        kProcSelfFdPath, strerror(errno));
     closedir(dir);
 }
 
@@ -548,13 +553,13 @@ int main(int argc, char **argv) {
             report_failure_and_exit(kStatusInternalError,
                 "New cgroup namespace: %s", strerror(errno));
 
-        run_server(&conf, &cgroup_ctx);
+        run_spawner(&conf, &cgroup_ctx);
         exit(EXIT_SUCCESS);
     }
 
     // TODO proxy requests, implement timeout
 
-    waitpid(server_pid, NULL, 0);
-    server_pid = -1;
+    waitpid(spawner_pid, NULL, 0);
+    spawner_pid = -1;
     return EXIT_SUCCESS;
 }

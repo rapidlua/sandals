@@ -26,7 +26,7 @@ extern const char kStatusPipeLimit[]; // = "sys.pipe.limit"
 extern const char kStatusInternalError[]; // = "sys.inernal.error"
 extern const char kStatusRequestInvalid[]; // = "sys.request.invalid"
 extern const char kStatusResponseTooBig[]; // = "sys.response.toobig"
-extern const char kStatusCustomStatusInvalid[]; // = "sys.customstatus.invalid"
+extern const char kStatusStatusInvalid[]; // = "sys.status.invalid"
 
 // returns request length or 0 on EOF;
 // request ends with \n (no NUL-termination)
