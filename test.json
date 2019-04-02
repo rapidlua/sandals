@@ -1,7 +1,0 @@
-{"mounts":[{"type":"proc","dest":"/proc"}],"cgroupConfig":{"pids.max":"16"},"user":"root"}
-{"cmd":["bash","-c",":(){ :|: & };:;sleep .1"]}
-{"cmd":["id"]}
-{"cmd":["ps", "-A"]}
-{"cmd":["hostname"]}
-{"cmd":["ifconfig"]}
-{"cmd":["id"],"pids.max":"1"}
