@@ -1,4 +1,4 @@
-#include "sandbozo.h"
+#include "sandals.h"
 #include <errno.h>
 #include <net/if.h>
 #include <string.h>
@@ -6,7 +6,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
-void configure_net(const struct sandbozo_request *request) {
+void configure_net(const struct sandals_request *request) {
 
     int s;
     struct ifreq ifr = { .ifr_name = "lo"};

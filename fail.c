@@ -1,5 +1,5 @@
 #define _GNU_SOURCE
-#include "sandbozo.h"
+#include "sandals.h"
 #include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -15,7 +15,7 @@ const char kStatusResponseTooBig[] = "sys.response.toobig";
 const char kStatusStatusInvalid[]  = "sys.status.invalid";
 
 void fail(const char *status, const char *fmt, ...) {
-    struct sandbozo_response response;
+    struct sandals_response response;
     char buf[PIPE_BUF];
     va_list ap;
     int rc;

@@ -1,4 +1,4 @@
-#include "sandbozo.h"
+#include "sandals.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <grp.h>
@@ -42,7 +42,7 @@ void map_user_and_group_begin(
 }
 
 void map_user_and_group_complete(
-    const struct sandbozo_request *request,
+    const struct sandals_request *request,
     struct map_user_and_group_ctx *ctx) {
 
     uid_t uid = proc_uid;

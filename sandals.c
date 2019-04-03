@@ -1,5 +1,5 @@
 #define _GNU_SOURCE
-#include "sandbozo.h"
+#include "sandals.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
@@ -19,7 +19,7 @@ static inline int myclone(int flags) {
 
 int main() {
     int spawnerout[2], hyper[2];
-    struct sandbozo_request request;
+    struct sandals_request request;
     struct cgroup_ctx cgroup_ctx;
 
     // otherwize log_write() becomes non-atomic

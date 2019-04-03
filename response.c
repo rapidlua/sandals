@@ -1,4 +1,4 @@
-#include "sandbozo.h"
+#include "sandals.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -6,14 +6,14 @@
 
 int response_fd = STDOUT_FILENO;
 
-void response_append_raw(struct sandbozo_response *response, const char *str) {
+void response_append_raw(struct sandals_response *response, const char *str) {
     size_t len = strlen(str);
     response->size += len;
     if (response->size <= sizeof response->buf)
         memcpy(response->buf + response->size - len, str, len);
 }
 
-void response_append_esc(struct sandbozo_response *response, const char *str) {
+void response_append_esc(struct sandals_response *response, const char *str) {
     char *p = response->buf + response->size, *e = response->overflow;
     for (; *str && p < e; ++str) {
         unsigned c = *(const unsigned char *)str;
@@ -39,13 +39,13 @@ void response_append_esc(struct sandbozo_response *response, const char *str) {
     response->size = p - response->buf;
 }
 
-void response_append_int(struct sandbozo_response *response, int value) {
+void response_append_int(struct sandals_response *response, int value) {
     char buf[16];
     sprintf(buf, "%d", value);
     response_append_raw(response, buf);
 }
 
-void response_send(const struct sandbozo_response *response) {
+void response_send(const struct sandals_response *response) {
     char buf[PIPE_BUF];
     const char *p, *e;
     size_t rc;

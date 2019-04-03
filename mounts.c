@@ -1,4 +1,4 @@
-#include "sandbozo.h"
+#include "sandals.h"
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
@@ -20,7 +20,7 @@ static void create_dirs(char *path) {
     // TODO
 }
 
-void do_mounts(const struct sandbozo_request *request) {
+void do_mounts(const struct sandals_request *request) {
 
     const jstr_token_t *mounts_end, *mnt, *tok;
     if (!request->mounts) return;

@@ -5,4 +5,4 @@ systemd-run --user $F -E WD=$(pwd) sh -c \
 mkdir $CGRP/mgmt &&\
 echo $$$$ > $CGRP/mgmt/cgroup.procs &&\
 echo +pids > $CGRP/cgroup.subtree_control &&\
-$WD/sandbozo'
+$WD/sandals'

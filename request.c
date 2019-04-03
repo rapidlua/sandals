@@ -1,4 +1,4 @@
-#include "sandbozo.h"
+#include "sandals.h"
 #include <errno.h>
 #include <math.h>
 #include <stdarg.h>
@@ -24,11 +24,11 @@ void *match_key(const char *str, ...) {
     return result;
 }
 
-void request_parse(struct sandbozo_request *request, const jstr_token_t *root) {
+void request_parse(struct sandals_request *request, const jstr_token_t *root) {
     const jstr_token_t *root_end, *tok;
-    struct sandbozo_request init = {
-        .host_name    = "sandbozo",
-        .domain_name  = "sandbozo",
+    struct sandals_request init = {
+        .host_name    = "sandals",
+        .domain_name  = "sandals",
         .chroot       = "/",
         .va_randomize = 1,
         .work_dir     = "/",
@@ -114,7 +114,7 @@ void request_parse(struct sandbozo_request *request, const jstr_token_t *root) {
         fail(kStatusRequestInvalid, "'cmd' missing or empty");
 }
 
-void request_recv(struct sandbozo_request *request) {
+void request_recv(struct sandals_request *request) {
     enum { TOKEN_MIN = 64 };
 
     char *buf = NULL;

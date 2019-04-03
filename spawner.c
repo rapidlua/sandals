@@ -1,5 +1,5 @@
 #define _GNU_SOURCE
-#include "sandbozo.h"
+#include "sandals.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <sched.h>
@@ -23,13 +23,13 @@ static int do_create_fifo(const char *path) {
 }
 
 static void create_fifo(
-    size_t index, const struct sandbozo_pipe *pipe, int fd[]) {
+    size_t index, const struct sandals_pipe *pipe, int fd[]) {
 
     fd[SECCOMPUSERNOTIFY+index] = do_create_fifo(pipe->fifo);
 }
 
 static void create_fifos(
-    const struct sandbozo_request *request, struct msghdr *msghdr) {
+    const struct sandals_request *request, struct msghdr *msghdr) {
 
     size_t npipes, sizefds;
     struct cmsghdr *cmsghdr;
@@ -63,14 +63,14 @@ static void create_fifos(
 }
 
 static void configure_seccomp(
-    const struct sandbozo_request *request, struct msghdr *msghdr) {
+    const struct sandals_request *request, struct msghdr *msghdr) {
     // TODO
 #if SECCOMPUSERNOTIFY
     *(int *)CMSG_DATA(CMSG_FIRSTHDR(msghdr)) = -1;
 #endif
 }
 
-int spawner(const struct sandbozo_request *request, int hyper_fd) {
+int spawner(const struct sandals_request *request, int hyper_fd) {
 
     int devnull_fd;
     struct map_user_and_group_ctx map_user_and_group_ctx;
@@ -78,7 +78,7 @@ int spawner(const struct sandbozo_request *request, int hyper_fd) {
     volatile int *exec_errno;
     pid_t child_pid, pid;
     int status;
-    struct sandbozo_response response;
+    struct sandals_response response;
 
     // ifup lo
     configure_net(request);

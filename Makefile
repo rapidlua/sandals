@@ -1,10 +1,10 @@
-OBJS += sandbozo.o request.o response.o fail.o file.o net.o mounts.o
+OBJS += sandals.o request.o response.o fail.o file.o net.o mounts.o
 OBJS += cgroup.o pipes.o usrgrp.o supervisor.o spawner.o jstr/jstr.o
 
-sandbozo: ${OBJS}
+sandals: ${OBJS}
 
 clean:
-	rm -fv sandbozo ${OBJS}
+	rm -fv sandbal ${OBJS}
 
-run: sandbozo
+run: sandals
 	./run.sh

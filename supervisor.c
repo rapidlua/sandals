@@ -1,5 +1,5 @@
 #define _GNU_SOURCE
-#include "sandbozo.h"
+#include "sandals.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <poll.h>
@@ -13,7 +13,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-struct sandbozo_sink {
+struct sandals_sink {
     const char *file;
     const char *fifo;
     int fd;
@@ -22,8 +22,8 @@ struct sandbozo_sink {
 };
 
 static void sink_init(
-    size_t index, const struct sandbozo_pipe *pipe,
-    struct sandbozo_sink *sink) {
+    size_t index, const struct sandals_pipe *pipe,
+    struct sandals_sink *sink) {
 
     sink[index].fifo = pipe->fifo;
     sink[index].splice = 1;
@@ -50,18 +50,18 @@ enum {
     PIPE0_INDEX
 };
 
-struct sandbozo_supervisor {
+struct sandals_supervisor {
     int exiting;
-    const struct sandbozo_request *request;
+    const struct sandals_request *request;
     size_t npipe;
     struct pollfd *pollfd;
     int npollfd;
-    struct sandbozo_sink *sink;
+    struct sandals_sink *sink;
     void *cmsgbuf;
-    struct sandbozo_response response, uresponse;
+    struct sandals_response response, uresponse;
 };
 
-static void do_hyper(struct sandbozo_supervisor *s) {
+static void do_hyper(struct sandals_supervisor *s) {
     char buf[1];
     struct iovec iovec = { .iov_base = buf, .iov_len = sizeof buf };
     struct msghdr msghdr = {
@@ -99,7 +99,7 @@ static void do_hyper(struct sandbozo_supervisor *s) {
     }
 }
 
-static int do_statusfifo(struct sandbozo_supervisor *s) {
+static int do_statusfifo(struct sandals_supervisor *s) {
     enum { TOKEN_COUNT = 64 };
     jstr_parser_t parser;
     jstr_token_t root[TOKEN_COUNT];
@@ -149,7 +149,7 @@ bad_response:
     return -1;
 }
 
-static int do_spawnerout(struct sandbozo_supervisor *s) {
+static int do_spawnerout(struct sandals_supervisor *s) {
     ssize_t rc = read(
         s->pollfd[SPAWNEROUT_INDEX].fd,
         s->response.buf+s->response.size,
@@ -168,10 +168,10 @@ static int do_spawnerout(struct sandbozo_supervisor *s) {
     return 0;
 }
 
-static int do_pipes(struct sandbozo_supervisor *s) {
+static int do_pipes(struct sandals_supervisor *s) {
     int status = 0;
     size_t rc;
-    struct sandbozo_sink *sink;
+    struct sandals_sink *sink;
     for (int i = s->npollfd; --i >= PIPE0_INDEX; ) {
         if (s->pollfd[i].fd==-1 || !s->pollfd[i].revents && !s->exiting)
             continue;
@@ -230,14 +230,14 @@ static int do_pipes(struct sandbozo_supervisor *s) {
 }
 
 int supervisor(
-    const struct sandbozo_request *request,
+    const struct sandals_request *request,
     const struct cgroup_ctx *cgroup_ctx,
     int spawnerout_fd, int hyper_fd) {
 
     int timer_fd;
     struct itimerspec itimerspec = {};
     ssize_t rc;
-    struct sandbozo_supervisor s = {
+    struct sandals_supervisor s = {
         .request = request, .npollfd = PIPE0_INDEX
     };
 
@@ -248,7 +248,7 @@ int supervisor(
         fail(kStatusInternalError, "Set timer: %s", strerror(errno));
 
     s.npipe = pipe_count(request);
-    if (!(s.sink = malloc(sizeof(struct sandbozo_sink)*s.npipe
+    if (!(s.sink = malloc(sizeof(struct sandals_sink)*s.npipe
         +sizeof(struct pollfd)*(PIPE0_INDEX+s.npipe)
         +CMSG_SPACE(sizeof(int)*(2+s.npipe)))
     )) fail(kStatusInternalError, "malloc");

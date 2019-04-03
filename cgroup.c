@@ -1,4 +1,4 @@
-#include "sandbozo.h"
+#include "sandals.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <poll.h>
@@ -15,7 +15,7 @@ static char cgroup_path[PATH_MAX];
 static int cgroupevents_fd; // "cgroup.events"
 
 // We exit() on unrecoverable error. The only resource in need of
-// cleanup in sandbozo is the cgroup we've created. For simplicity, we
+// cleanup in sandals is the cgroup we've created. For simplicity, we
 // implement cleanup in a global destructor.
 //
 // Cleanup action is enabled by spawner_pid:
@@ -41,7 +41,7 @@ void cleanup_cgroup() {
 }
 
 void create_cgroup(
-    const struct sandbozo_request *request, struct cgroup_ctx *ctx) {
+    const struct sandals_request *request, struct cgroup_ctx *ctx) {
 
     const char *prefix = "", *cgroup_root = request->cgroup_root;
     size_t len;
@@ -76,7 +76,7 @@ void create_cgroup(
     }
 
     // Format cgroup_path
-    if (snprintf(cgroup_path, sizeof cgroup_path, "%s%.*s/sandbozo-%d",
+    if (snprintf(cgroup_path, sizeof cgroup_path, "%s%.*s/sandals-%d",
             prefix, (int)len, cgroup_root, getpid()) >= sizeof cgroup_path
     ) fail(kStatusInternalError, "Path too long");
 

@@ -1,9 +1,9 @@
-#include "sandbozo.h"
+#include "sandals.h"
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
 
-size_t pipe_count(const struct sandbozo_request *request) {
+size_t pipe_count(const struct sandals_request *request) {
     const jstr_token_t *pipes_end, *tok;
     size_t count = 0;
     if (!request->pipes) return 0;
@@ -14,14 +14,14 @@ size_t pipe_count(const struct sandbozo_request *request) {
 }
 
 void pipe_foreach(
-    const struct sandbozo_request *request, void(*fn)(), void *userdata) {
+    const struct sandals_request *request, void(*fn)(), void *userdata) {
 
     const jstr_token_t *pipes_end, *tok, *i;
     size_t index=0;
     if (!request->pipes) return;
     pipes_end = jstr_next(request->pipes);
     for (tok = request->pipes+1; tok != pipes_end; ) {
-        struct sandbozo_pipe pipe = { .limit = LONG_MAX };
+        struct sandals_pipe pipe = { .limit = LONG_MAX };
         if (jstr_type(tok)!=JSTR_OBJECT)
             fail(kStatusRequestInvalid,
                 "%s[%zu]: expecting an object", kPipesKey, index);
