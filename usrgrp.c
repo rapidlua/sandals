@@ -48,7 +48,6 @@ void map_user_and_group_complete(
     uid_t uid = proc_uid;
     gid_t gid = proc_gid;
     char buf[64];
-    size_t size;
 
     if (request->user) {
         struct passwd *pw = getpwnam(request->user);

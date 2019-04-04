@@ -20,7 +20,7 @@ void configure_net(const struct sandals_request *request) {
         || (ifr.ifr_flags |= IFF_UP|IFF_RUNNING,
             ioctl(s, SIOCSIFFLAGS, &ifr) == -1
     )) fail(kStatusInternalError,
-        "ioctl(SIOCGIFFLAGS,SIOCSIFFLAGS): %s", strerror(errno));
+        "Enabling loopback network interface: %s", strerror(errno));
 
     close(s);
 

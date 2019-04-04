@@ -45,7 +45,7 @@ void create_cgroup(
 
     const char *prefix = "", *cgroup_root = request->cgroup_root;
     size_t len;
-    char path_buf[PATH_MAX], buf[32];
+    char path_buf[PATH_MAX];
     const jstr_token_t *tok, *conf_end;
     int fd;
 
@@ -62,6 +62,7 @@ void create_cgroup(
             fail(kStatusInternalError,
                 "Reading '%s': %s", kProcSelfCgroupPath, strerror(errno));
 
+        // TODO validation insufficient for mixed v1/v2 configuration
         if (rc < 3 || memcmp(path_buf, "0::", 3) || path_buf[rc-1]!='\n')
             fail(kStatusInternalError,
                 "Cgroup info in '%s' too long or in Cgroups v1 format",
@@ -94,7 +95,7 @@ void create_cgroup(
 
     // open cgroup.procs
     snprintf(path_buf, sizeof path_buf, "%s/cgroup.procs", cgroup_path);
-    ctx->cgroupprocs_fd = open_checked(path_buf, O_RDWR|O_CLOEXEC|O_NOCTTY, 0);
+    ctx->cgroupprocs_fd = open_checked(path_buf, O_WRONLY|O_CLOEXEC|O_NOCTTY, 0);
 
     // open cgroup.events
     snprintf(path_buf, sizeof path_buf, "%s/cgroup.events", cgroup_path);

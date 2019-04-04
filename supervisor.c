@@ -22,20 +22,18 @@ struct sandals_sink {
 };
 
 static void sink_init(
-    size_t index, const struct sandals_pipe *pipe,
+    int index, const struct sandals_pipe *pipe,
     struct sandals_sink *sink) {
 
+    sink[index].file = pipe->file;
     sink[index].fifo = pipe->fifo;
+    sink[index].fd = open_checked(
+        pipe->file, O_CLOEXEC|O_WRONLY|O_TRUNC|O_CREAT|O_NOCTTY, 0600);
     sink[index].splice = 1;
     sink[index].limit = pipe->limit;
-    sink[index].fd = open_checked(
-        sink[index].file = pipe->file,
-        O_CLOEXEC|O_WRONLY|O_TRUNC|O_CREAT|O_NOCTTY, 0600);
-    // Non-blocking mode screws data forwarder (do_pipes).
-    // May happen if pipe->file is /proc/self/fd/*.
-    if (fcntl(sink[index].fd, F_GETFL)&O_NONBLOCK)
-        fail(kStatusInternalError,
-            "File '%s': non-blocking mode not supported", pipe->file);
+    // We depend on fd being in blocking IO mode. This is guaranteed
+    // since we are explicitly requesting this mode via open() flags
+    // (even when opening /proc/self/fd/*).
 }
 
 enum {
@@ -50,17 +48,25 @@ enum {
     PIPE0_INDEX
 };
 
+//         HYPER ... PIPE0 ...
+//         /        /
+// pollfd [.....................]
+// sink            [............]
+//
+// I.e. two parallel arrays with an offset.
 struct sandals_supervisor {
     int exiting;
     const struct sandals_request *request;
-    size_t npipe;
-    struct pollfd *pollfd;
+    int npipe;
     int npollfd;
     struct sandals_sink *sink;
+    struct pollfd *pollfd;
     void *cmsgbuf;
     struct sandals_response response, uresponse;
 };
 
+// Receive SECCOMPUSERNOTIFY, PIPE0 ... PIPEn, STATUSFIFO descriptors
+// (transmitted in this order).
 static void do_hyper(struct sandals_supervisor *s) {
     char buf[1];
     struct iovec iovec = { .iov_base = buf, .iov_len = sizeof buf };
@@ -79,7 +85,7 @@ static void do_hyper(struct sandals_supervisor *s) {
     }
     s->pollfd[HYPER_INDEX].fd = -1;
     if (rc>0
-        && (cmsghdr = CMSG_FIRSTHDR(&msghdr))
+        && (cmsghdr = CMSG_FIRSTHDR(&msghdr)) // might be NULL
         && cmsghdr->cmsg_level == SOL_SOCKET
         && cmsghdr->cmsg_type == SCM_RIGHTS
         && cmsghdr->cmsg_len == CMSG_LEN(sizeof(int)
@@ -89,7 +95,7 @@ static void do_hyper(struct sandals_supervisor *s) {
 #if SECCOMPUSERNOTIFY
         s->pollfd[SECCOMPUSERNOTIFY_INDEX].fd = fd[0];
 #endif
-        for (size_t i = 0; i < s->npipe; ++i) {
+        for (int i = 0; i < s->npipe; ++i) {
             s->pollfd[PIPE0_INDEX+i].fd = fd[SECCOMPUSERNOTIFY+i];
             s->pollfd[PIPE0_INDEX+i].events = POLLIN;
         };
@@ -154,7 +160,7 @@ static int do_spawnerout(struct sandals_supervisor *s) {
         s->pollfd[SPAWNEROUT_INDEX].fd,
         s->response.buf+s->response.size,
         (sizeof s->response.buf)-s->response.size+1);
-    if (!rc>0) {
+    if (!rc) {
         if (!s->response.size)
             fail(kStatusInternalError, "Empty response");
         return 1;
@@ -170,8 +176,10 @@ static int do_spawnerout(struct sandals_supervisor *s) {
 
 static int do_pipes(struct sandals_supervisor *s) {
     int status = 0;
-    size_t rc;
+    ssize_t rc;
     struct sandals_sink *sink;
+    // If multiple pipes exceeded their limit, report the first one
+    // (that's why we are processing them in reverse order.)
     for (int i = s->npollfd; --i >= PIPE0_INDEX; ) {
         if (s->pollfd[i].fd==-1 || !s->pollfd[i].revents && !s->exiting)
             continue;
@@ -234,28 +242,31 @@ int supervisor(
     const struct cgroup_ctx *cgroup_ctx,
     int spawnerout_fd, int hyper_fd) {
 
+    struct sandals_supervisor s; // no initializer - large embedded buffers
     int timer_fd;
-    struct itimerspec itimerspec = {};
-    ssize_t rc;
-    struct sandals_supervisor s = {
-        .request = request, .npollfd = PIPE0_INDEX
-    };
+    struct itimerspec itimerspec = { .it_value = request->time_limit };
 
-    if ((timer_fd = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC)) == -1)
-        fail(kStatusInternalError, "Create timer: %s", strerror(errno));
-    itimerspec.it_value = request->time_limit;
-    if (timerfd_settime(timer_fd, 0, &itimerspec, NULL) == -1)
-        fail(kStatusInternalError, "Set timer: %s", strerror(errno));
-
+    s.exiting = 0;
+    s.request = request;
     s.npipe = pipe_count(request);
+    s.npollfd = PIPE0_INDEX;
     if (!(s.sink = malloc(sizeof(struct sandals_sink)*s.npipe
         +sizeof(struct pollfd)*(PIPE0_INDEX+s.npipe)
         +CMSG_SPACE(sizeof(int)*(2+s.npipe)))
     )) fail(kStatusInternalError, "malloc");
     s.pollfd = (struct pollfd *)(s.sink+s.npipe);
     s.cmsgbuf = s.pollfd+PIPE0_INDEX+s.npipe;
+    s.response.size = s.uresponse.size = 0;
 
+    // User may trick us into re-opening any object we've created (using
+    // /proc/self/fd/* paths). Fortunately, timers and sockets can't be
+    // reopened (but pipes can!)
     pipe_foreach(request, sink_init, s.sink);
+
+    if ((timer_fd = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC)) == -1)
+        fail(kStatusInternalError, "Create timer: %s", strerror(errno));
+    if (timerfd_settime(timer_fd, 0, &itimerspec, NULL) == -1)
+        fail(kStatusInternalError, "Set timer: %s", strerror(errno));
 
     s.pollfd[HYPER_INDEX].fd = hyper_fd;
     s.pollfd[HYPER_INDEX].events = POLLIN;
@@ -271,8 +282,6 @@ int supervisor(
     s.pollfd[TIMER_INDEX].events = POLLIN;
     s.pollfd[SPAWNEROUT_INDEX].fd = spawnerout_fd;
     s.pollfd[SPAWNEROUT_INDEX].events = POLLIN;
-
-    s.response.size = s.uresponse.size = 0;
 
     for (;;) {
         if (poll(s.pollfd, s.npollfd, -1) == -1 && errno != EINTR)

@@ -42,7 +42,7 @@ extern const char kMountsKey[];       // = "mounts"
 extern const char kCgroupConfigKey[]; // = "cgroupConfig"
 extern const char kPipesKey[];        // = "pipes"
 
-void *match_key(const char *str, ...);
+void *match_key(const char *str, ...) __attribute__((sentinel));
 
 void request_recv(struct sandals_request *request);
 
@@ -56,10 +56,6 @@ void response_append_raw(struct sandals_response *response, const char *str);
 void response_append_esc(struct sandals_response *response, const char *str);
 void response_append_int(struct sandals_response *response, int value);
 void response_send(const struct sandals_response *response);
-
-static inline int response_too_big(const struct sandals_response *response) {
-    return response->size > sizeof response->buf;
-}
 
 int open_checked(const char *path, int flags, mode_t mode);
 void write_checked(int fd, const void *buf, size_t size, const char *path);
@@ -86,7 +82,7 @@ struct sandals_pipe {
     long limit;
 };
 
-size_t pipe_count(const struct sandals_request *request);
+int pipe_count(const struct sandals_request *request);
 
 void pipe_foreach(
     const struct sandals_request *request, void(*fn)(), void *userdata);

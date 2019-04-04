@@ -46,11 +46,11 @@ void response_append_int(struct sandals_response *response, int value) {
 }
 
 void response_send(const struct sandals_response *response) {
-    char buf[PIPE_BUF];
     const char *p, *e;
     size_t rc;
 
-    if (response_too_big(response)) fail(kStatusResponseTooBig, NULL);
+    if (response->size > sizeof response->buf)
+        fail(kStatusResponseTooBig, NULL);
     if (response_fd == -1) return;
 
     p = response->buf; e = p + response->size;

@@ -23,7 +23,7 @@ static int do_create_fifo(const char *path) {
 }
 
 static void create_fifo(
-    size_t index, const struct sandals_pipe *pipe, int fd[]) {
+    int index, const struct sandals_pipe *pipe, int fd[]) {
 
     fd[SECCOMPUSERNOTIFY+index] = do_create_fifo(pipe->fifo);
 }
@@ -33,12 +33,6 @@ static void create_fifos(
 
     size_t npipes, sizefds;
     struct cmsghdr *cmsghdr;
-
-    msghdr->msg_name = NULL;
-    msghdr->msg_namelen = 0;
-    msghdr->msg_flags = 0;
-    msghdr->msg_control = NULL;
-    msghdr->msg_controllen = 0;
 
     npipes = pipe_count(request);
     sizefds = sizeof(int)
@@ -74,7 +68,7 @@ int spawner(const struct sandals_request *request, int hyper_fd) {
 
     int devnull_fd;
     struct map_user_and_group_ctx map_user_and_group_ctx;
-    struct msghdr msghdr;
+    struct msghdr msghdr = {};
     volatile int *exec_errno;
     pid_t child_pid, pid;
     int status;
@@ -125,7 +119,7 @@ int spawner(const struct sandals_request *request, int hyper_fd) {
         fail(kStatusInternalError,
             "mmap(SHARED+ANONYMOUS): %s", strerror(errno));
 
-    create_fifos(request, &msghdr);
+    create_fifos(request, &msghdr); // allocates cmsg buffer
     configure_seccomp(request, &msghdr);
 
     // send file descriptros to supervisor
@@ -143,9 +137,9 @@ int spawner(const struct sandals_request *request, int hyper_fd) {
     case -1:
         fail(kStatusInternalError, "fork: %s", strerror(errno));
     case 0:
-        dup3(devnull_fd, STDIN_FILENO, 0) != -1 /*
+        dup3(devnull_fd, STDIN_FILENO, 0) != -1
         && dup3(devnull_fd, STDOUT_FILENO, 0) != -1
-        && dup3(devnull_fd, STDERR_FILENO, 0) != -1 */
+        && dup3(devnull_fd, STDERR_FILENO, 0) != -1
         && execvpe(request->cmd[0], (char **)request->cmd, (char **)request->env);
         *exec_errno = errno;
         exit(EXIT_FAILURE);

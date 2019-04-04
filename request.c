@@ -32,7 +32,7 @@ void request_parse(struct sandals_request *request, const jstr_token_t *root) {
         .chroot       = "/",
         .va_randomize = 1,
         .work_dir     = "/",
-        .time_limit   = { .tv_sec = 10 }
+        .time_limit   = { .tv_sec = LONG_MAX }
     };
 
     *request = init;
@@ -118,14 +118,14 @@ void request_recv(struct sandals_request *request) {
     enum { TOKEN_MIN = 64 };
 
     char *buf = NULL;
-    size_t size = 0, data_size = 0, chunk_size;
+    size_t size = 0, data_size = 0;
     ssize_t rc;
     jstr_parser_t parser;
     jstr_token_t *root = NULL;
     size_t token_count = 0;
 
     while (1) {
-        if (size - data_size < PIPE_BUF) {
+        if (size - data_size <= PIPE_BUF/2) {
             size = size ? 2*size : PIPE_BUF;
             if (!(buf = realloc(buf, size)))
                 fail(kStatusInternalError, "malloc");
@@ -146,7 +146,7 @@ void request_recv(struct sandals_request *request) {
         if(!(root = realloc(root, sizeof(root[0])*token_count)))
             fail(kStatusInternalError, "malloc");
     }
-    if (data_size != rc)
+    if (rc < 0 || (size_t)data_size != rc)
         fail(kStatusRequestInvalid, NULL);
     if (jstr_type(root) != JSTR_OBJECT)
         fail(kStatusRequestInvalid, "Expecting an object");

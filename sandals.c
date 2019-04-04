@@ -12,8 +12,12 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-// I love fork()!
+// clone() in libc is weird: it requires us to supply a stack for the
+// new task - the underlying syscall may work fork-style (stack COW)
 static inline int myclone(int flags) {
+    // Using bare clone() syscall was reported to be interfering with
+    // LIBC pid caching. Glibc removed the caching recently hence this
+    // should work. MUSL doesn't have caching either.
     return syscall(SYS_clone, SIGCHLD|flags, NULL);
 }
 
