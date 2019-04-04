@@ -1,0 +1,10 @@
+{
+    "cmd": [ "sh", "-xc", "(ifconfig;hostname;pstree -p;cat /proc/self/cgroup;ls /proc/1/fd;exit 42) > /tmp/@stdout 2>&1" ],
+    "pipes": [
+        { "file": "/proc/self/fd/1", "fifo": "/tmp/@stdout" }
+    ],
+    "mounts": [
+        { "type": "tmpfs", "dest": "/tmp" },
+        { "type": "proc", "dest": "/proc" }
+    ]
+}
