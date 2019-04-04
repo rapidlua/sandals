@@ -59,7 +59,7 @@ void response_send(const struct sandals_response *response);
 
 int open_checked(const char *path, int flags, mode_t mode);
 void write_checked(int fd, const void *buf, size_t size, const char *path);
-void close_stray_fds_except(int except1, int except2);
+void close_stray_fds_except(int fd);
 
 void configure_net(const struct sandals_request *request);
 
@@ -100,8 +100,8 @@ extern pid_t spawner_pid;
 int supervisor(
     const struct sandals_request *request,
     const struct cgroup_ctx *cgroup_ctx,
-    int spawnerout_fd, int hyper_fd);
+    int spawnerout_fd);
 
-int spawner(const struct sandals_request *request, int hyper_fd);
+int spawner(const struct sandals_request *request);
 
 #define SECCOMPUSERNOTIFY 0

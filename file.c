@@ -28,7 +28,7 @@ void write_checked(
         "Writing '%s': %s", path, rc==-1?strerror(errno):"truncated");
 }
 
-void close_stray_fds_except(int except1, int except2) {
+void close_stray_fds_except(int except) {
     static const char kProcSelfFdPath[] = "/proc/self/fd";
     DIR *dir;
     struct dirent *dirent;
@@ -39,7 +39,7 @@ void close_stray_fds_except(int except1, int except2) {
         // parsing non-numeric entries yields fd=0, which is fine
         int fd = strtol(dirent->d_name, NULL, 0);
         if (fd > STDERR_FILENO
-            && fd != except1 && fd != except2 && fd != dirfd(dir)
+            && fd != except && fd != dirfd(dir)
         ) close(fd);
     }
     if (errno) fail(

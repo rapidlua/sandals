@@ -37,7 +37,6 @@ static void sink_init(
 }
 
 enum {
-    HYPER_INDEX,
 #if HAVE_SECCOMPUSERNOTIFY
     SECCOMPUSERNOTIFY_INDEX,
 #endif
@@ -48,7 +47,8 @@ enum {
     PIPE0_INDEX
 };
 
-//         HYPER ... PIPE0 ...
+//           SECCOMPUSERNOTIFY
+//          /        PIPE0
 //         /        /
 // pollfd [.....................]
 // sink            [............]
@@ -64,46 +64,6 @@ struct sandals_supervisor {
     void *cmsgbuf;
     struct sandals_response response, uresponse;
 };
-
-// Receive SECCOMPUSERNOTIFY, PIPE0 ... PIPEn, STATUSFIFO descriptors
-// (transmitted in this order).
-static void do_hyper(struct sandals_supervisor *s) {
-    char buf[1];
-    struct iovec iovec = { .iov_base = buf, .iov_len = sizeof buf };
-    struct msghdr msghdr = {
-        .msg_iov = &iovec,
-        .msg_iovlen = 1,
-        .msg_control = s->cmsgbuf,
-        .msg_controllen = CMSG_SPACE(sizeof(int)*(2+s->npipe))
-    };
-    struct cmsghdr *cmsghdr;
-    ssize_t rc = recvmsg(
-        s->pollfd[HYPER_INDEX].fd, &msghdr, MSG_DONTWAIT|MSG_CMSG_CLOEXEC);
-    if (rc==-1) {
-        if (errno == EAGAIN || errno == EWOULDBLOCK) return;
-        fail(kStatusInternalError, "recvmsg: %s", strerror(errno));
-    }
-    s->pollfd[HYPER_INDEX].fd = -1;
-    if (rc>0
-        && (cmsghdr = CMSG_FIRSTHDR(&msghdr)) // might be NULL
-        && cmsghdr->cmsg_level == SOL_SOCKET
-        && cmsghdr->cmsg_type == SCM_RIGHTS
-        && cmsghdr->cmsg_len == CMSG_LEN(sizeof(int)
-            *(SECCOMPUSERNOTIFY+s->npipe+(s->request->status_fifo!=NULL)))
-    ) {
-        const int *fd = (const int *)CMSG_DATA(cmsghdr);
-#if SECCOMPUSERNOTIFY
-        s->pollfd[SECCOMPUSERNOTIFY_INDEX].fd = fd[0];
-#endif
-        for (int i = 0; i < s->npipe; ++i) {
-            s->pollfd[PIPE0_INDEX+i].fd = fd[SECCOMPUSERNOTIFY+i];
-            s->pollfd[PIPE0_INDEX+i].events = POLLIN;
-        };
-        if (s->request->status_fifo)
-            s->pollfd[STATUSFIFO_INDEX].fd = fd[SECCOMPUSERNOTIFY+s->npipe];
-        s->npollfd = PIPE0_INDEX+s->npipe;
-    }
-}
 
 static int do_statusfifo(struct sandals_supervisor *s) {
     enum { TOKEN_COUNT = 64 };
@@ -156,22 +116,54 @@ bad_response:
 }
 
 static int do_spawnerout(struct sandals_supervisor *s) {
-    ssize_t rc = read(
-        s->pollfd[SPAWNEROUT_INDEX].fd,
-        s->response.buf+s->response.size,
-        (sizeof s->response.buf)-s->response.size+1);
+    struct iovec iovec = {
+        .iov_base = s->response.buf+s->response.size,
+        .iov_len = (sizeof s->response.buf)-s->response.size+1
+    };
+    struct msghdr msghdr = {
+        .msg_iov = &iovec,
+        .msg_iovlen = 1,
+        .msg_control = s->cmsgbuf,
+        .msg_controllen = CMSG_SPACE(sizeof(int)*(2+s->npipe))
+    };
+    struct cmsghdr *cmsghdr;
+    ssize_t rc = recvmsg(
+        s->pollfd[SPAWNEROUT_INDEX].fd, &msghdr, MSG_DONTWAIT|MSG_CMSG_CLOEXEC);
+    if (rc==-1) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK) return 0;
+        fail(kStatusInternalError,
+            "Receiving response: %s", strerror(errno));
+    }
     if (!rc) {
         if (!s->response.size)
             fail(kStatusInternalError, "Empty response");
         return 1;
     }
-    if (rc==-1) {
-        if (errno==EINTR) return 0;
-        fail(kStatusInternalError,
-            "Receiving response: %s", strerror(errno));
+    if ((cmsghdr = CMSG_FIRSTHDR(&msghdr)) // might be NULL
+        && cmsghdr->cmsg_level == SOL_SOCKET
+        && cmsghdr->cmsg_type == SCM_RIGHTS
+        && cmsghdr->cmsg_len == CMSG_LEN(sizeof(int)
+            *(SECCOMPUSERNOTIFY+s->npipe+(s->request->status_fifo!=NULL)))
+    ) {
+        // Unpack SECCOMPUSERNOTIFY, PIPE0 ... PIPEn, STATUSFIFO
+        // descriptors (transmitted in this order).
+        const int *fd = (const int *)CMSG_DATA(cmsghdr);
+#if SECCOMPUSERNOTIFY
+        s->pollfd[SECCOMPUSERNOTIFY_INDEX].fd = fd[0];
+#endif
+        for (int i = 0; i < s->npipe; ++i) {
+            s->pollfd[PIPE0_INDEX+i].fd = fd[SECCOMPUSERNOTIFY+i];
+            s->pollfd[PIPE0_INDEX+i].events = POLLIN;
+            s->pollfd[PIPE0_INDEX+i].revents = 0;
+        };
+        if (s->request->status_fifo)
+            s->pollfd[STATUSFIFO_INDEX].fd = fd[SECCOMPUSERNOTIFY+s->npipe];
+        s->npollfd = PIPE0_INDEX+s->npipe;
+        return 0;
     }
     s->response.size += rc;
-    return 0;
+    // Spawner response is NL-terminated.
+    return s->response.buf[s->response.size-1] == '\n';
 }
 
 static int do_pipes(struct sandals_supervisor *s) {
@@ -240,7 +232,7 @@ static int do_pipes(struct sandals_supervisor *s) {
 int supervisor(
     const struct sandals_request *request,
     const struct cgroup_ctx *cgroup_ctx,
-    int spawnerout_fd, int hyper_fd) {
+    int spawnerout_fd) {
 
     struct sandals_supervisor s; // no initializer - large embedded buffers
     int timer_fd;
@@ -268,8 +260,6 @@ int supervisor(
     if (timerfd_settime(timer_fd, 0, &itimerspec, NULL) == -1)
         fail(kStatusInternalError, "Set timer: %s", strerror(errno));
 
-    s.pollfd[HYPER_INDEX].fd = hyper_fd;
-    s.pollfd[HYPER_INDEX].events = POLLIN;
 #if SECCOMPUSERNOTIFY
     s.pollfd[SECCOMPUSERNOTIFY_INDEX].fd = -1;
     s.pollfd[SECCOMPUSERNOTIFY_INDEX].events = POLLIN;
@@ -286,11 +276,6 @@ int supervisor(
     for (;;) {
         if (poll(s.pollfd, s.npollfd, -1) == -1 && errno != EINTR)
             fail(kStatusInternalError, "poll: %s", strerror(errno));
-
-        if (s.pollfd[HYPER_INDEX].revents) {
-            do_hyper(&s);
-            continue; // new fds were installed, have to re-poll
-        }
 
 #if SECCOMPUSERNOTIFY
         if (s.pollfd[SECCOMPUSERNOTIFY_INDEX].revents) {
@@ -319,5 +304,10 @@ int supervisor(
     kill(spawner_pid, SIGKILL); spawner_pid = -1;
     s.exiting = 1; do_pipes(&s);
     response_send(&s.response);
+    // Pending cgroup cleanup will take a while. Close early explicitly
+    // so that a user will get the response faster.
+    // CAVEAT: sandboxed processes may not terminate yet. This might be
+    // an issue if a directory was mapped RW into the sandbox.
+    close(STDOUT_FILENO);
     return EXIT_SUCCESS;
 }

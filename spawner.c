@@ -64,7 +64,7 @@ static void configure_seccomp(
 #endif
 }
 
-int spawner(const struct sandals_request *request, int hyper_fd) {
+int spawner(const struct sandals_request *request) {
 
     int devnull_fd;
     struct map_user_and_group_ctx map_user_and_group_ctx;
@@ -122,13 +122,13 @@ int spawner(const struct sandals_request *request, int hyper_fd) {
     create_fifos(request, &msghdr); // allocates cmsg buffer
     configure_seccomp(request, &msghdr);
 
-    // send file descriptros to supervisor
+    // send file descriptors to supervisor
     if (SECCOMPUSERNOTIFY || msghdr.msg_control) {
         char buf[1] = {};
         struct iovec iovec = { .iov_base = buf, .iov_len = sizeof buf };
         msghdr.msg_iov = &iovec;
         msghdr.msg_iovlen = 1;
-        if (sendmsg(hyper_fd, &msghdr, 0) == -1)
+        if (sendmsg(response_fd, &msghdr, 0) == -1)
             fail(kStatusInternalError, "sendmsg: %s", strerror(errno));
     }
 

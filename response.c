@@ -51,7 +51,6 @@ void response_send(const struct sandals_response *response) {
 
     if (response->size > sizeof response->buf)
         fail(kStatusResponseTooBig, NULL);
-    if (response_fd == -1) return;
 
     p = response->buf; e = p + response->size;
     while (p != e) {
@@ -63,6 +62,4 @@ void response_send(const struct sandals_response *response) {
         }
         p += rc;
     }
-
-    close(response_fd); response_fd = -1;
 }

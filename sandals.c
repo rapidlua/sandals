@@ -22,7 +22,7 @@ static inline int myclone(int flags) {
 }
 
 int main() {
-    int spawnerout[2], hyper[2];
+    int spawnerout[2];
     struct sandals_request request;
     struct cgroup_ctx cgroup_ctx;
 
@@ -30,10 +30,8 @@ int main() {
     setvbuf(stderr, NULL, _IOLBF, 0);
 
     request_recv(&request);
-    if (pipe2(spawnerout, O_CLOEXEC) == -1)
-        fail(kStatusInternalError, "pipe2: %s", strerror(errno));
     if (socketpair(AF_UNIX,
-        SOCK_STREAM|SOCK_CLOEXEC|SOCK_NONBLOCK, 0, hyper) == -1
+        SOCK_STREAM|SOCK_CLOEXEC|SOCK_NONBLOCK, 0, spawnerout) == -1
     ) fail(kStatusInternalError,
         "socketpair(AF_UNIX, SOCK_STREAM): %s", strerror(errno));
     create_cgroup(&request, &cgroup_ctx);
@@ -61,14 +59,13 @@ int main() {
             fail(kStatusInternalError,
                 "New cgroup namespace: %s", strerror(errno));
 
-        close_stray_fds_except(spawnerout[1], hyper[1]);
+        close_stray_fds_except(spawnerout[1]);
 
-        return spawner(&request, hyper[1]);
+        return spawner(&request);
     default:
         // stdout, stderr or pipe files may SIGPIPE
         signal(SIGPIPE, SIG_IGN);
         close(spawnerout[1]);
-        close(hyper[1]);
-        return supervisor(&request, &cgroup_ctx, spawnerout[0], hyper[0]);
+        return supervisor(&request, &cgroup_ctx, spawnerout[0]);
     }
 }
