@@ -4,6 +4,7 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sched.h>
 #include <sys/prctl.h>
@@ -21,13 +22,18 @@ static inline int myclone(int flags) {
     return syscall(SYS_clone, SIGCHLD|flags, NULL);
 }
 
-int main() {
+int main(int argc) {
     int spawnerout[2];
     struct sandals_request request;
     struct cgroup_ctx cgroup_ctx;
 
     // otherwize log_write() becomes non-atomic
     setvbuf(stderr, NULL, _IOLBF, 0);
+
+    if (argc>1) {
+        log_error("Does not accept arguments");
+        return EXIT_FAILURE;
+    }
 
     request_recv(&request);
     // Spawner writes response into this socket, MUST use blocking IO.
