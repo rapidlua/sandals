@@ -30,10 +30,10 @@ int main() {
     setvbuf(stderr, NULL, _IOLBF, 0);
 
     request_recv(&request);
-    if (socketpair(AF_UNIX,
-        SOCK_STREAM|SOCK_CLOEXEC|SOCK_NONBLOCK, 0, spawnerout) == -1
-    ) fail(kStatusInternalError,
-        "socketpair(AF_UNIX, SOCK_STREAM): %s", strerror(errno));
+    // Spawner writes response into this socket, MUST use blocking IO.
+    if (socketpair(AF_UNIX, SOCK_STREAM|SOCK_CLOEXEC, 0, spawnerout) == -1)
+        fail(kStatusInternalError,
+            "socketpair(AF_UNIX, SOCK_STREAM): %s", strerror(errno));
     create_cgroup(&request, &cgroup_ctx);
     switch ((spawner_pid = myclone(CLONE_NEWUSER|CLONE_NEWPID|CLONE_NEWNET
         |CLONE_NEWUTS|CLONE_NEWNS))) {

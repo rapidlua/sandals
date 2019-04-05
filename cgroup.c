@@ -31,6 +31,13 @@ void cleanup_cgroup() {
         .events = POLLPRI
     };
     if (!spawner_pid) return;
+
+    // Pending cgroup cleanup will take a while. Close early explicitly
+    // so that a user will get the response faster.
+    // CAVEAT: sandboxed processes may not terminate yet. This might be
+    // an issue if a directory was mapped RW into the sandbox.
+    close(response_fd);
+
     if (spawner_pid != -1) kill(spawner_pid, SIGKILL);
     // wait for cgroup to be vacated and remove it
     while (rmdir(cgroup_path)==-1 && errno==EBUSY) {

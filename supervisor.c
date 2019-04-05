@@ -304,10 +304,5 @@ int supervisor(
     kill(spawner_pid, SIGKILL); spawner_pid = -1;
     s.exiting = 1; do_pipes(&s);
     response_send(&s.response);
-    // Pending cgroup cleanup will take a while. Close early explicitly
-    // so that a user will get the response faster.
-    // CAVEAT: sandboxed processes may not terminate yet. This might be
-    // an issue if a directory was mapped RW into the sandbox.
-    close(STDOUT_FILENO);
     return EXIT_SUCCESS;
 }
