@@ -37,9 +37,6 @@ static void sink_init(
 }
 
 enum {
-#if HAVE_SECCOMPUSERNOTIFY
-    SECCOMPUSERNOTIFY_INDEX,
-#endif
     MEMORYEVENTS_INDEX,
     STATUSFIFO_INDEX,
     TIMER_INDEX,
@@ -47,7 +44,7 @@ enum {
     PIPE0_INDEX
 };
 
-//           SECCOMPUSERNOTIFY
+//           MEMORYEVENTS
 //          /        PIPE0
 //         /        /
 // pollfd [.....................]
@@ -143,21 +140,18 @@ static int do_spawnerout(struct sandals_supervisor *s) {
         && cmsghdr->cmsg_level == SOL_SOCKET
         && cmsghdr->cmsg_type == SCM_RIGHTS
         && cmsghdr->cmsg_len == CMSG_LEN(sizeof(int)
-            *(SECCOMPUSERNOTIFY+s->npipe+(s->request->status_fifo!=NULL)))
+            *(s->npipe+(s->request->status_fifo!=NULL)))
     ) {
-        // Unpack SECCOMPUSERNOTIFY, PIPE0 ... PIPEn, STATUSFIFO
-        // descriptors (transmitted in this order).
+        // Unpack PIPE0 ... PIPEn, STATUSFIFO descriptors
+        // (transmitted in this order).
         const int *fd = (const int *)CMSG_DATA(cmsghdr);
-#if SECCOMPUSERNOTIFY
-        s->pollfd[SECCOMPUSERNOTIFY_INDEX].fd = fd[0];
-#endif
         for (int i = 0; i < s->npipe; ++i) {
-            s->pollfd[PIPE0_INDEX+i].fd = fd[SECCOMPUSERNOTIFY+i];
+            s->pollfd[PIPE0_INDEX+i].fd = fd[i];
             s->pollfd[PIPE0_INDEX+i].events = POLLIN;
             s->pollfd[PIPE0_INDEX+i].revents = 0;
         };
         if (s->request->status_fifo)
-            s->pollfd[STATUSFIFO_INDEX].fd = fd[SECCOMPUSERNOTIFY+s->npipe];
+            s->pollfd[STATUSFIFO_INDEX].fd = fd[s->npipe];
         s->npollfd = PIPE0_INDEX+s->npipe;
         return 0;
     }
@@ -244,7 +238,7 @@ int supervisor(
     s.npollfd = PIPE0_INDEX;
     if (!(s.sink = malloc(sizeof(struct sandals_sink)*s.npipe
         +sizeof(struct pollfd)*(PIPE0_INDEX+s.npipe)
-        +CMSG_SPACE(sizeof(int)*(2+s.npipe)))
+        +CMSG_SPACE(sizeof(int)*(1+s.npipe)))
     )) fail(kStatusInternalError, "malloc");
     s.pollfd = (struct pollfd *)(s.sink+s.npipe);
     s.cmsgbuf = s.pollfd+PIPE0_INDEX+s.npipe;
@@ -260,10 +254,6 @@ int supervisor(
     if (timerfd_settime(timer_fd, 0, &itimerspec, NULL) == -1)
         fail(kStatusInternalError, "Set timer: %s", strerror(errno));
 
-#if SECCOMPUSERNOTIFY
-    s.pollfd[SECCOMPUSERNOTIFY_INDEX].fd = -1;
-    s.pollfd[SECCOMPUSERNOTIFY_INDEX].events = POLLIN;
-#endif
     s.pollfd[MEMORYEVENTS_INDEX].fd = cgroup_ctx->memoryevents_fd;
     s.pollfd[MEMORYEVENTS_INDEX].events = POLLPRI;
     s.pollfd[STATUSFIFO_INDEX].fd = -1;
@@ -277,11 +267,6 @@ int supervisor(
         if (poll(s.pollfd, s.npollfd, -1) == -1 && errno != EINTR)
             fail(kStatusInternalError, "poll: %s", strerror(errno));
 
-#if SECCOMPUSERNOTIFY
-        if (s.pollfd[SECCOMPUSERNOTIFY_INDEX].revents) {
-            // TODO seccomp violations
-        }
-#endif
         if (s.pollfd[MEMORYEVENTS_INDEX].revents) {
             // TODO memory events (OOM)
         }

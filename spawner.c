@@ -25,7 +25,7 @@ static int do_create_fifo(const char *path) {
 static void create_fifo(
     int index, const struct sandals_pipe *pipe, int fd[]) {
 
-    fd[SECCOMPUSERNOTIFY+index] = do_create_fifo(pipe->fifo);
+    fd[index] = do_create_fifo(pipe->fifo);
 }
 
 static void create_fifos(
@@ -35,10 +35,9 @@ static void create_fifos(
     struct cmsghdr *cmsghdr;
 
     npipes = pipe_count(request);
-    sizefds = sizeof(int)
-        *(SECCOMPUSERNOTIFY+npipes+(request->status_fifo!=NULL));
+    sizefds = sizeof(int)*(npipes+(request->status_fifo!=NULL));
 
-    if (!SECCOMPUSERNOTIFY && !sizefds) return;
+    if (!sizefds) return;
 
     if (!(msghdr->msg_control = malloc(
         msghdr->msg_controllen = CMSG_SPACE(sizefds)))
@@ -52,16 +51,12 @@ static void create_fifos(
     pipe_foreach(request, create_fifo, (int*)CMSG_DATA(cmsghdr));
 
     if (request->status_fifo)
-        ((int*)CMSG_DATA(cmsghdr))[SECCOMPUSERNOTIFY+npipes] =
+        ((int*)CMSG_DATA(cmsghdr))[npipes] =
             do_create_fifo(request->status_fifo);
 }
 
-static void configure_seccomp(
-    const struct sandals_request *request, struct msghdr *msghdr) {
+static void configure_seccomp(const struct sandals_request *request) {
     // TODO
-#if SECCOMPUSERNOTIFY
-    *(int *)CMSG_DATA(CMSG_FIRSTHDR(msghdr)) = -1;
-#endif
 }
 
 int spawner(const struct sandals_request *request) {
@@ -122,10 +117,9 @@ int spawner(const struct sandals_request *request) {
             "mmap(SHARED+ANONYMOUS): %s", strerror(errno));
 
     create_fifos(request, &msghdr); // allocates cmsg buffer
-    configure_seccomp(request, &msghdr);
 
     // send file descriptors to supervisor
-    if (SECCOMPUSERNOTIFY || msghdr.msg_control) {
+    if (msghdr.msg_control) {
         char buf[1] = {};
         struct iovec iovec = { .iov_base = buf, .iov_len = sizeof buf };
         msghdr.msg_iov = &iovec;
@@ -133,6 +127,8 @@ int spawner(const struct sandals_request *request) {
         if (sendmsg(response_fd, &msghdr, 0) == -1)
             fail(kStatusInternalError, "sendmsg: %s", strerror(errno));
     }
+
+    configure_seccomp(request);
 
     // Fork child process
     switch ((child_pid = fork())) {

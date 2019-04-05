@@ -103,5 +103,3 @@ int supervisor(
     int spawnerout_fd);
 
 int spawner(const struct sandals_request *request);
-
-#define SECCOMPUSERNOTIFY 0
