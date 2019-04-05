@@ -40,10 +40,16 @@ void cleanup_cgroup() {
 
     if (spawner_pid != -1) kill(spawner_pid, SIGKILL);
     // wait for cgroup to be vacated and remove it
-    while (rmdir(cgroup_path)==-1 && errno==EBUSY) {
+    while (rmdir(cgroup_path)==-1) {
         // read resets internal 'updates pending' flag;
-        if (pread(cgroupevents_fd, buf, sizeof buf, 0) == -1) return;
-        poll(&pollfd, 1, -1);
+        if (errno != EBUSY
+            || pread(cgroupevents_fd, buf, sizeof buf, 0) == -1
+            || poll(&pollfd, 1, -1) == -1 && errno != EINTR
+        ) {
+            log_error("Removing cgroup '%s': %s",
+                cgroup_path, strerror(errno));
+            return;
+        }
     }
 }
 
