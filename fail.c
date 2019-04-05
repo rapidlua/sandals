@@ -40,7 +40,7 @@ void fail(const char *status, const char *fmt, ...) {
 void log_error(const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
-    fprintf(stderr, "%s: ", program_invocation_short_name);
+    fprintf(stderr, "%s[%d]: ", program_invocation_short_name, getpid());
     vfprintf(stderr, fmt, ap);
     fputc('\n', stderr);
 }
