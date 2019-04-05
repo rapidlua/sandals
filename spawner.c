@@ -106,10 +106,12 @@ int spawner(const struct sandals_request *request) {
     ) fail(kStatusInternalError,
         "personality: %s", strerror(errno));
 
-    if (chdir(request->work_dir) == -1)
-        fail(kStatusInternalError,
-            "Setting work dir to '%s': %s",
-            request->work_dir, strerror(errno));
+    // chdir, beware relative paths
+    if (*request->work_dir != '/' && chdir("/") == -1
+        || chdir(request->work_dir) == -1
+    ) fail(kStatusInternalError,
+        "Setting work dir to '%s': %s",
+        request->work_dir, strerror(errno));
 
     // grab shared memory page for exec_errno
     exec_errno = mmap(
