@@ -7,6 +7,7 @@
 
 const char kStatusExited[]         = "sys.exited";
 const char kStatusKilled[]         = "sys.killed";
+const char kStatusOom[]            = "sys.oom";
 const char kStatusTimeLimit[]      = "sys.time.limit";
 const char kStatusPipeLimit[]      = "sys.pipe.limit";
 const char kStatusInternalError[]  = "sys.internalerror";

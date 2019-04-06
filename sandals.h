@@ -13,6 +13,7 @@ void fail(const char *status, const char *fmt, ...)
 
 extern const char kStatusExited[];         // = "sys.exited"
 extern const char kStatusKilled[];         // = "sys.killed"
+extern const char kStatusOom[];            // = "sys.oom"
 extern const char kStatusTimeLimit[];      // = "sys.time.limit"
 extern const char kStatusPipeLimit[];      // = "sys.pipe.limit"
 extern const char kStatusInternalError[];  // = "sys.internal.error"

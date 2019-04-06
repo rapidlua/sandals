@@ -1,0 +1,14 @@
+{
+    "cmd": [ "dd", "if=/dev/zero", "of=/tmp/zero", "bs=512K" ],
+    "pipes": [
+        { "file": "/proc/self/fd/1", "fifo": "/tmp/@stdout" }
+    ],
+    "mounts": [
+        { "type": "tmpfs", "dest": "/tmp" },
+        { "type": "proc", "dest": "/proc" }
+    ],
+    "cgroupConfig": {
+        "memory.max": "1000000",
+        "memory.swap.max": "1000000"
+    }
+}

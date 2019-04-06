@@ -62,6 +62,57 @@ struct sandals_supervisor {
     struct sandals_response response, uresponse;
 };
 
+static int do_memoryevents(struct sandals_supervisor *s) {
+    char buf[128];
+    ssize_t rc, i;
+    off_t offset = 0;
+    int state = 0;
+    while ((rc = pread(
+        s->pollfd[MEMORYEVENTS_INDEX].fd, buf, sizeof buf, offset))) {
+
+        if (rc == -1)
+            fail(kStatusInternalError,
+                "Reading 'memory.events': %s", strerror(errno));
+
+        // State machine matching '\woom_kill +[1-9]'.
+        offset += rc; i = 0;
+        switch (state) {
+        matchmore:
+        case 0: case 1: case 2: case 3: case 4: case 5: case 6: case 7: case 8:
+            if (buf[i]=="oom_kill "[state]) {
+                ++state;
+                if (++i==rc) break;
+                if (state!=9) goto matchmore;
+        skipws:
+        case 9:
+                if (buf[i]=='0') return 0;
+                if (buf[i]>'0' && buf[i]<='9') {
+                    s->response.size = 0;
+                    response_append_raw(&s->response, "{\"status\":\"");
+                    response_append_esc(&s->response, kStatusOom);
+                    response_append_raw(&s->response, "\"}\n");
+                    return -1;
+                }
+                if (buf[i]==' ') {
+                    if (++i==rc) break;
+                    goto skipws;
+                } // fallthrough
+            }
+        skipmore:
+        case 10:
+            if (buf[i]==' ' || buf[i]=='\n') {
+                state = 0;
+                if (++i==rc) break;
+                goto matchmore;
+            } else {
+                if (++i==rc) { state = 10; break; }
+                goto skipmore;
+            }
+        }
+    }
+    return 0;
+}
+
 static int do_statusfifo(struct sandals_supervisor *s) {
     enum { TOKEN_COUNT = 64 };
     jstr_parser_t parser;
@@ -267,9 +318,7 @@ int supervisor(
         if (poll(s.pollfd, s.npollfd, -1) == -1 && errno != EINTR)
             fail(kStatusInternalError, "poll: %s", strerror(errno));
 
-        if (s.pollfd[MEMORYEVENTS_INDEX].revents) {
-            // TODO memory events (OOM)
-        }
+        if (s.pollfd[MEMORYEVENTS_INDEX].revents && do_memoryevents(&s)) break;
 
         if (s.pollfd[STATUSFIFO_INDEX].revents && do_statusfifo(&s)) break;
 
