@@ -132,7 +132,6 @@ static int do_statusfifo(struct sandals_supervisor *s) {
             "Receiving response: %s", strerror(errno));
     }
     s->pollfd[STATUSFIFO_INDEX].fd = -1;
-    if (!s->uresponse.size) goto bad_response;
     // copy first since validation mutates uresponse
     memcpy(
         s->response.buf, s->uresponse.buf,
@@ -213,14 +212,13 @@ static int do_spawnerout(struct sandals_supervisor *s) {
 
 static int do_pipes(struct sandals_supervisor *s) {
     int status = 0;
-    ssize_t rc;
-    struct sandals_sink *sink;
     // If multiple pipes exceeded their limit, report the first one
     // (that's why we are processing them in reverse order.)
     for (int i = s->npollfd; --i >= PIPE0_INDEX; ) {
         if (s->pollfd[i].fd==-1 || !s->pollfd[i].revents && !s->exiting)
             continue;
-        sink = s->sink+i-PIPE0_INDEX;
+        ssize_t rc;
+        struct sandals_sink *sink  = s->sink+i-PIPE0_INDEX;
         if (sink->limit && sink->splice) {
             if ((rc = splice(
                 s->pollfd[i].fd, NULL, sink->fd, NULL, sink->limit,
