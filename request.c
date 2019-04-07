@@ -42,14 +42,15 @@ void request_parse(struct sandals_request *request, const jstr_token_t *root) {
         const char *key = jstr_value(tok);
         void *dest;
         if ((dest = match_key(key,
-                "hostName",   &request->host_name,
-                "domainName", &request->domain_name,
-                "user",       &request->user,
-                "group",      &request->group,
-                "chroot",     &request->chroot,
-                "cgroupRoot", &request->cgroup_root,
-                "workDir",    &request->work_dir,
-                "statusFifo", &request->status_fifo,
+                "hostName",      &request->host_name,
+                "domainName",    &request->domain_name,
+                "user",          &request->user,
+                "group",         &request->group,
+                "chroot",        &request->chroot,
+                "cgroupRoot",    &request->cgroup_root,
+                "seccompPolicy", &request->seccomp_policy,
+                "workDir",       &request->work_dir,
+                "statusFifo",    &request->status_fifo,
                 NULL))) {
             if (jstr_type(tok+1) != JSTR_STRING) fail(
                 kStatusRequestInvalid, "%s: expecting a string", key);

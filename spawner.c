@@ -1,7 +1,9 @@
 #define _GNU_SOURCE
 #include "sandals.h"
+#include "kafel/include/kafel.h"
 #include <errno.h>
 #include <fcntl.h>
+#include <linux/seccomp.h>
 #include <sched.h>
 #include <signal.h>
 #include <stdlib.h>
@@ -55,8 +57,15 @@ static void create_fifos(
             do_create_fifo(request->status_fifo);
 }
 
-static void configure_seccomp(const struct sandals_request *request) {
-    // TODO
+static void configure_seccomp(
+    const struct sandals_request *request, struct sock_fprog *sock_fprog) {
+
+    if (!request->seccomp_policy) return;
+    kafel_ctxt_t ctx = kafel_ctxt_create();
+    kafel_set_input_string(ctx, request->seccomp_policy);
+    if (kafel_compile(ctx, sock_fprog))
+        fail(kStatusRequestInvalid,
+            "Seccomp policy: %s", kafel_error_msg(ctx));
 }
 
 int spawner(const struct sandals_request *request) {
@@ -65,6 +74,7 @@ int spawner(const struct sandals_request *request) {
     struct map_user_and_group_ctx map_user_and_group_ctx;
     struct msghdr msghdr = {};
     volatile int *exec_errno;
+    struct sock_fprog sock_fprog = {};
     pid_t child_pid, pid;
     int status;
     struct sandals_response response;
@@ -128,7 +138,7 @@ int spawner(const struct sandals_request *request) {
             fail(kStatusInternalError, "sendmsg: %s", strerror(errno));
     }
 
-    configure_seccomp(request);
+    configure_seccomp(request, &sock_fprog);
 
     // Fork child process
     switch ((child_pid = fork())) {
@@ -138,6 +148,8 @@ int spawner(const struct sandals_request *request) {
         dup3(devnull_fd, STDIN_FILENO, 0) != -1
         && dup3(devnull_fd, STDOUT_FILENO, 0) != -1
         && dup3(devnull_fd, STDERR_FILENO, 0) != -1
+        && (!sock_fprog.len || prctl(
+            PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &sock_fprog, 0, 0) != -1)
         && execvpe(request->cmd[0], (char **)request->cmd, (char **)request->env);
         *exec_errno = errno;
         exit(EXIT_FAILURE);

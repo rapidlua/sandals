@@ -30,6 +30,7 @@ struct sandals_request {
     const jstr_token_t *mounts;
     const char *cgroup_root;
     const jstr_token_t *cgroup_config;
+    const char *seccomp_policy;
     int va_randomize; // address space randomisation
     const char **cmd;
     const char **env;
