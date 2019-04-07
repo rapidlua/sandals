@@ -26,16 +26,6 @@ void *match_key(const char *str, ...) {
 
 void request_parse(struct sandals_request *request, const jstr_token_t *root) {
     const jstr_token_t *root_end, *tok;
-    struct sandals_request init = {
-        .host_name    = "sandals",
-        .domain_name  = "sandals",
-        .chroot       = "/",
-        .va_randomize = 1,
-        .work_dir     = "/",
-        .time_limit   = { .tv_sec = LONG_MAX }
-    };
-
-    *request = init;
 
     tok = root + 1; root_end = jstr_next(root);
     while (tok != root_end) {

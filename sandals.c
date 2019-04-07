@@ -24,7 +24,14 @@ static inline int myclone(int flags) {
 
 int main(int argc) {
     int spawnerout[2];
-    struct sandals_request request;
+    struct sandals_request request = {
+        .host_name    = "sandals",
+        .domain_name  = "sandals",
+        .chroot       = "/",
+        .va_randomize = 1,
+        .work_dir     = "/",
+        .time_limit   = { .tv_sec = LONG_MAX }
+    };
     struct cgroup_ctx cgroup_ctx;
 
     // otherwize log_write() becomes non-atomic
