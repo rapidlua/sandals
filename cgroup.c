@@ -58,9 +58,8 @@ void create_cgroup(
 
     const char *prefix = "", *cgroup_root = request->cgroup_root;
     size_t len;
+    int memoryevents = 0;
     char path_buf[PATH_MAX];
-    const jstr_token_t *tok, *conf_end;
-    int fd;
 
     if (cgroup_root) {
         len = strlen(cgroup_root);
@@ -101,46 +100,52 @@ void create_cgroup(
     // enable cleanup_cgroup() destructor
     spawner_pid = -1;
 
+    // apply config
+    if (request->cgroup_config) {
+        const jstr_token_t *tok, *conf_end  = jstr_next(request->cgroup_config);
+        for (tok = request->cgroup_config + 1; tok != conf_end; tok += 2) {
+            const char *key = jstr_value(tok), *value;
+            int fd;
+
+            if (jstr_type(tok+1) != JSTR_STRING)
+                fail(kStatusRequestInvalid,
+                    "%s['%s']: expecting a string", kCgroupConfigKey, key);
+
+            while (*key=='/') ++key;
+
+            if (snprintf(path_buf, sizeof path_buf, "%s/%s", cgroup_path, key)
+            >= sizeof path_buf) fail(kStatusInternalError, "Path too long");
+
+            value = jstr_value(tok+1);
+            fd = open_checked(path_buf, O_WRONLY|O_CLOEXEC|O_NOCTTY, 0),
+            write_checked(fd, value, strlen(value), path_buf);
+            close(fd);
+
+            if (!strncmp(key, "memory.", 7)) memoryevents = 1;
+        }
+    }
+
     // ensure we can safely append any of cgroup.procs, memory.events or
     // cgroup.events suffixes
-    if (strlen(cgroup_path) + 16 > sizeof path_buf)
+    struct suffix { const char data[14]; };
+#define SUFFIX(s) (((struct suffix){(s)}),(s))
+
+    if (strlen(cgroup_path) + sizeof(struct suffix) > sizeof path_buf)
         fail(kStatusInternalError, "Path too long");
 
     // open cgroup.procs
-    snprintf(path_buf, sizeof path_buf, "%s/cgroup.procs", cgroup_path);
+    sprintf(path_buf, "%s%s", cgroup_path, SUFFIX("/cgroup.procs"));
     ctx->cgroupprocs_fd = open_checked(path_buf, O_WRONLY|O_CLOEXEC|O_NOCTTY, 0);
 
     // open cgroup.events
-    snprintf(path_buf, sizeof path_buf, "%s/cgroup.events", cgroup_path);
+    sprintf(path_buf, "%s%s", cgroup_path, SUFFIX("/cgroup.events"));
     cgroupevents_fd = open_checked(path_buf, O_RDONLY|O_CLOEXEC|O_NOCTTY, 0);
 
-    // open memory.events (optional)
-    snprintf(path_buf, sizeof path_buf, "%s/memory.events", cgroup_path);
-    if ((ctx->memoryevents_fd = open(
-            path_buf, O_RDONLY|O_CLOEXEC|O_NOCTTY, 0))==-1
-        && errno != ENOENT
-    ) fail(kStatusInternalError,
-        "Opening '%s': %s", path_buf, strerror(errno));
-
-    // apply config
-    if (!request->cgroup_config) return;
-
-    conf_end = jstr_next(request->cgroup_config);
-    for (tok = request->cgroup_config + 1; tok != conf_end; tok += 2) {
-        const char *key = jstr_value(tok), *value;
-
-        if (jstr_type(tok+1) != JSTR_STRING)
-            fail(kStatusRequestInvalid,
-                "%s['%s']: expecting a string", kCgroupConfigKey, key);
-
-        while (*key=='/') ++key;
-
-        if (snprintf(path_buf, sizeof path_buf, "%s/%s", cgroup_path, key)
-        >= sizeof path_buf) fail(kStatusInternalError, "Path too long");
-
-        value = jstr_value(tok+1);
-        fd = open_checked(path_buf, O_WRONLY|O_CLOEXEC|O_NOCTTY, 0),
-        write_checked(fd, value, strlen(value), path_buf);
-        close(fd);
+    // open memory.events
+    ctx->memoryevents_fd = -1;
+    if (memoryevents) {
+        sprintf(path_buf, "%s%s", cgroup_path, SUFFIX("/memory.events"));
+        ctx->memoryevents_fd = open_checked(
+            path_buf, O_RDONLY|O_CLOEXEC|O_NOCTTY, 0);
     }
 }
