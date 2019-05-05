@@ -40,7 +40,6 @@ static void sink_init(
 enum {
     MEMORYEVENTS_INDEX,
     PIDSEVENTS_INDEX,
-    STATUSFIFO_INDEX,
     TIMER_INDEX,
     SPAWNEROUT_INDEX,
     PIPE0_INDEX
@@ -61,7 +60,7 @@ struct sandals_supervisor {
     struct sandals_sink *sink;
     struct pollfd *pollfd;
     void *cmsgbuf;
-    struct sandals_response response, uresponse;
+    struct sandals_response response;
 };
 
 static bool cgroup_counter_nonzero(
@@ -111,7 +110,7 @@ static int do_memoryevents(struct sandals_supervisor *s) {
     if (fd!=-1 && cgroup_counter_nonzero(fd, "oom_kill ", "memory.events")) {
         s->response.size = 0;
         response_append_raw(&s->response, "{\"status\":\"");
-        response_append_esc(&s->response, kStatusOom);
+        response_append_esc(&s->response, kStatusMemoryLimit);
         response_append_raw(&s->response, "\"}\n");
         return -1;
     }
@@ -123,60 +122,11 @@ static int do_pidsevents(struct sandals_supervisor *s) {
     if (fd!=-1 && cgroup_counter_nonzero(fd, "max ", "pids.events")) {
         s->response.size = 0;
         response_append_raw(&s->response, "{\"status\":\"");
-        response_append_esc(&s->response, kStatusPids);
+        response_append_esc(&s->response, kStatusPidsLimit);
         response_append_raw(&s->response, "\"}\n");
         return -1;
     }
     return 0;
-}
-
-static int do_statusfifo(struct sandals_supervisor *s) {
-    enum { TOKEN_COUNT = 64 };
-    jstr_parser_t parser;
-    jstr_token_t root[TOKEN_COUNT];
-    const jstr_token_t *root_end, *tok;
-    ssize_t rc = read(
-        s->pollfd[STATUSFIFO_INDEX].fd,
-        s->uresponse.buf+s->uresponse.size,
-        (sizeof s->uresponse.buf)-s->uresponse.size+1);
-    if (rc>0) {
-        s->uresponse.size += rc;
-        return 0;
-    }
-    if (rc==-1) {
-        if (errno==EAGAIN || errno==EWOULDBLOCK) return 0;
-        fail(kStatusInternalError,
-            "Receiving response: %s", strerror(errno));
-    }
-    s->pollfd[STATUSFIFO_INDEX].fd = -1;
-    // copy first since validation mutates uresponse
-    memcpy(
-        s->response.buf, s->uresponse.buf,
-        s->response.size = s->uresponse.size);
-    jstr_init(&parser);
-    s->uresponse.buf[s->uresponse.size] = 0;
-    if (s->uresponse.size > sizeof s->uresponse.buf
-        || jstr_parse(
-            &parser, s->uresponse.buf,
-            root, TOKEN_COUNT) != s->uresponse.size
-        || jstr_type(root)!=JSTR_OBJECT
-    ) goto bad_response;
-    root_end = jstr_next(root); tok = root+1;
-    while (tok!=root_end) {
-        if (!strcmp(jstr_value(tok), "status")
-            && (jstr_type(tok+1)!=JSTR_STRING
-                || !strncmp(jstr_value(tok+1), "sys.", 4))
-        ) goto bad_response;
-        tok = jstr_next(tok+1);
-    }
-    return 1;
-bad_response:
-    // don't use fail(), might lose piped data
-    s->response.size = 0;
-    response_append_raw(&s->response, "{\"status\":\"");
-    response_append_esc(&s->response, kStatusStatusInvalid);
-    response_append_raw(&s->response, "\"}\n");
-    return -1;
 }
 
 static int do_spawnerout(struct sandals_supervisor *s) {
@@ -207,9 +157,9 @@ static int do_spawnerout(struct sandals_supervisor *s) {
         && cmsghdr->cmsg_level == SOL_SOCKET
         && cmsghdr->cmsg_type == SCM_RIGHTS
         && cmsghdr->cmsg_len == CMSG_LEN(sizeof(int)
-            *(s->npipe+(s->request->status_fifo!=NULL)))
+            *(s->npipe))
     ) {
-        // Unpack PIPE0 ... PIPEn, STATUSFIFO descriptors
+        // Unpack PIPE0 ... PIPEn
         // (transmitted in this order).
         const int *fd = (const int *)CMSG_DATA(cmsghdr);
         for (int i = 0; i < s->npipe; ++i) {
@@ -217,8 +167,6 @@ static int do_spawnerout(struct sandals_supervisor *s) {
             s->pollfd[PIPE0_INDEX+i].events = POLLIN;
             s->pollfd[PIPE0_INDEX+i].revents = 0;
         };
-        if (s->request->status_fifo)
-            s->pollfd[STATUSFIFO_INDEX].fd = fd[s->npipe];
         s->npollfd = PIPE0_INDEX+s->npipe;
         return 0;
     }
@@ -276,7 +224,7 @@ static int do_pipes(struct sandals_supervisor *s) {
             if (rc) {
                 s->response.size = 0;
                 response_append_raw(&s->response, "{\"status\":\"");
-                response_append_esc(&s->response, kStatusPipeLimit);
+                response_append_esc(&s->response, kStatusFileLimit);
                 response_append_raw(&s->response, "\",\"fifo\":\"");
                 response_append_esc(&s->response, sink->fifo);
                 response_append_raw(&s->response, "\",\"file\":\"");
@@ -308,7 +256,7 @@ int supervisor(
     )) fail(kStatusInternalError, "malloc");
     s.pollfd = (struct pollfd *)(s.sink+s.npipe);
     s.cmsgbuf = s.pollfd+PIPE0_INDEX+s.npipe;
-    s.response.size = s.uresponse.size = 0;
+    s.response.size = 0;
 
     // User may trick us into re-opening any object we've created (using
     // /proc/self/fd/* paths). Fortunately, timers and sockets can't be
@@ -324,8 +272,6 @@ int supervisor(
     s.pollfd[MEMORYEVENTS_INDEX].events = POLLPRI;
     s.pollfd[PIDSEVENTS_INDEX].fd = cgroup_ctx->pidsevents_fd;
     s.pollfd[PIDSEVENTS_INDEX].events = POLLPRI;
-    s.pollfd[STATUSFIFO_INDEX].fd = -1;
-    s.pollfd[STATUSFIFO_INDEX].events = POLLIN;
     s.pollfd[TIMER_INDEX].fd = timer_fd;
     s.pollfd[TIMER_INDEX].events = POLLIN;
     s.pollfd[SPAWNEROUT_INDEX].fd = spawnerout_fd;
@@ -338,8 +284,6 @@ int supervisor(
         if (s.pollfd[MEMORYEVENTS_INDEX].revents && do_memoryevents(&s)) break;
 
         if (s.pollfd[PIDSEVENTS_INDEX].revents && do_pidsevents(&s)) break;
-
-        if (s.pollfd[STATUSFIFO_INDEX].revents && do_statusfifo(&s)) break;
 
         if (s.pollfd[TIMER_INDEX].revents) {
             s.response.size = 0;

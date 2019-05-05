@@ -40,7 +40,6 @@ void request_parse(struct sandals_request *request, const jstr_token_t *root) {
                 "cgroupRoot",    &request->cgroup_root,
                 "seccompPolicy", &request->seccomp_policy,
                 "workDir",       &request->work_dir,
-                "statusFifo",    &request->status_fifo,
                 NULL))) {
             if (jstr_type(tok+1) != JSTR_STRING) fail(
                 kStatusRequestInvalid, "%s: expecting a string", key);

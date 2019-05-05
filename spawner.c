@@ -37,7 +37,7 @@ static void create_fifos(
     struct cmsghdr *cmsghdr;
 
     npipes = pipe_count(request);
-    sizefds = sizeof(int)*(npipes+(request->status_fifo!=NULL));
+    sizefds = sizeof(int)*npipes;
 
     if (!sizefds) return;
 
@@ -51,10 +51,6 @@ static void create_fifos(
     cmsghdr->cmsg_len = CMSG_LEN(sizefds);
 
     pipe_foreach(request, create_fifo, (int*)CMSG_DATA(cmsghdr));
-
-    if (request->status_fifo)
-        ((int*)CMSG_DATA(cmsghdr))[npipes] =
-            do_create_fifo(request->status_fifo);
 }
 
 static void configure_seccomp(

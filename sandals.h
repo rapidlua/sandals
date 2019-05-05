@@ -11,16 +11,15 @@ extern int response_fd;
 void fail(const char *status, const char *fmt, ...)
     __attribute__((noreturn, format(printf, 2, 3)));
 
-extern const char kStatusExited[];         // = "sys.exited"
-extern const char kStatusKilled[];         // = "sys.killed"
-extern const char kStatusOom[];            // = "sys.oom"
-extern const char kStatusPids[];           // = "sys.pids"
-extern const char kStatusTimeLimit[];      // = "sys.time.limit"
-extern const char kStatusPipeLimit[];      // = "sys.pipe.limit"
-extern const char kStatusInternalError[];  // = "sys.internal.error"
-extern const char kStatusRequestInvalid[]; // = "sys.request.invalid"
-extern const char kStatusResponseTooBig[]; // = "sys.response.toobig"
-extern const char kStatusStatusInvalid[];  // = "sys.status.invalid"
+extern const char kStatusExited[];         // = "exited"
+extern const char kStatusKilled[];         // = "killed"
+extern const char kStatusMemoryLimit[];    // = "memoryLimit"
+extern const char kStatusPidsLimit[];      // = "pidsLimit"
+extern const char kStatusTimeLimit[];      // = "timeLimit"
+extern const char kStatusFileLimit[];      // = "fileLimit"
+extern const char kStatusInternalError[];  // = "internalError"
+extern const char kStatusRequestInvalid[]; // = "requestInvalid"
+extern const char kStatusResponseTooBig[]; // = "responseTooBig"
 
 struct sandals_request {
     const char *host_name;
@@ -37,7 +36,6 @@ struct sandals_request {
     const char **env;
     const char *work_dir;
     struct timespec time_limit;
-    const char *status_fifo;
     const jstr_token_t *pipes;
 };
 

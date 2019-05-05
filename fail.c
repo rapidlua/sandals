@@ -5,16 +5,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-const char kStatusExited[]         = "sys.exited";
-const char kStatusKilled[]         = "sys.killed";
-const char kStatusOom[]            = "sys.oom";
-const char kStatusPids[]           = "sys.pids";
-const char kStatusTimeLimit[]      = "sys.time.limit";
-const char kStatusPipeLimit[]      = "sys.pipe.limit";
-const char kStatusInternalError[]  = "sys.internalerror";
-const char kStatusRequestInvalid[] = "sys.request.invalid";
-const char kStatusResponseTooBig[] = "sys.response.toobig";
-const char kStatusStatusInvalid[]  = "sys.status.invalid";
+const char kStatusExited[]         = "exited";
+const char kStatusKilled[]         = "killed";
+const char kStatusMemoryLimit[]    = "memoryLimit";
+const char kStatusPidsLimit[]      = "pidsLimit";
+const char kStatusTimeLimit[]      = "timeLimit";
+const char kStatusFileLimit[]      = "fileLimit";
+const char kStatusInternalError[]  = "internalError";
+const char kStatusRequestInvalid[] = "requestInvalid";
+const char kStatusResponseTooBig[] = "responseTooBig";
 
 void fail(const char *status, const char *fmt, ...) {
     struct sandals_response response;
