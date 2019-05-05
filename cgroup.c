@@ -58,7 +58,7 @@ void create_cgroup(
 
     const char *prefix = "", *cgroup_root = request->cgroup_root;
     size_t len;
-    int memoryevents = 0;
+    int memoryevents = 0, pidevents = 0;
     char path_buf[PATH_MAX];
 
     if (cgroup_root) {
@@ -122,6 +122,7 @@ void create_cgroup(
             close(fd);
 
             if (!strncmp(key, "memory.", 7)) memoryevents = 1;
+            if (!strncmp(key, "pids.", 5)) pidevents = 1;
         }
     }
 
@@ -146,6 +147,14 @@ void create_cgroup(
     if (memoryevents) {
         sprintf(path_buf, "%s%s", cgroup_path, SUFFIX("/memory.events"));
         ctx->memoryevents_fd = open_checked(
+            path_buf, O_RDONLY|O_CLOEXEC|O_NOCTTY, 0);
+    }
+
+    // open pids.events
+    ctx->pidsevents_fd = -1;
+    if (pidevents) {
+        sprintf(path_buf, "%s%s", cgroup_path, SUFFIX("/pids.events"));
+        ctx->pidsevents_fd = open_checked(
             path_buf, O_RDONLY|O_CLOEXEC|O_NOCTTY, 0);
     }
 }

@@ -4,6 +4,7 @@
 #include <fcntl.h>
 #include <poll.h>
 #include <signal.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -38,6 +39,7 @@ static void sink_init(
 
 enum {
     MEMORYEVENTS_INDEX,
+    PIDSEVENTS_INDEX,
     STATUSFIFO_INDEX,
     TIMER_INDEX,
     SPAWNEROUT_INDEX,
@@ -62,53 +64,68 @@ struct sandals_supervisor {
     struct sandals_response response, uresponse;
 };
 
-static int do_memoryevents(struct sandals_supervisor *s) {
+static bool cgroup_counter_nonzero(
+    int fd, const char* key, const char *filename
+) {
     char buf[128];
     ssize_t rc, i;
     off_t offset = 0;
     int state = 0;
-    while ((rc = pread(
-        s->pollfd[MEMORYEVENTS_INDEX].fd, buf, sizeof buf, offset))) {
+    while ((rc = pread(fd, buf, sizeof buf, offset))) {
 
         if (rc == -1)
             fail(kStatusInternalError,
-                "Reading 'memory.events': %s", strerror(errno));
+                "Reading '%s': %s", filename, strerror(errno));
 
-        // State machine matching '\woom_kill +[1-9]'.
+        // State machine matching '\w(?P=key)[ ]*[1-9]'.
         offset += rc; i = 0;
         switch (state) {
         matchmore:
-        case 0: case 1: case 2: case 3: case 4: case 5: case 6: case 7: case 8:
-            if (buf[i]=="oom_kill "[state]) {
+            if (++i==rc) break;
+            if (!key[state]) {
+                if (buf[i]==' ') goto matchmore;
+                return buf[i]>'0' && buf[i]<='9';
+            } else
+        default:
+            if (buf[i]==key[state]) {
                 ++state;
-                if (++i==rc) break;
-                if (state!=9) goto matchmore;
-        skipws:
-        case 9:
-                if (buf[i]=='0') return 0;
-                if (buf[i]>'0' && buf[i]<='9') {
-                    s->response.size = 0;
-                    response_append_raw(&s->response, "{\"status\":\"");
-                    response_append_esc(&s->response, kStatusOom);
-                    response_append_raw(&s->response, "\"}\n");
-                    return -1;
-                }
-                if (buf[i]==' ') {
-                    if (++i==rc) break;
-                    goto skipws;
-                } // fallthrough
+                goto matchmore;
             }
+            // fallthrough
         skipmore:
-        case 10:
+        case -1:
             if (buf[i]==' ' || buf[i]=='\n') {
                 state = 0;
-                if (++i==rc) break;
                 goto matchmore;
             } else {
-                if (++i==rc) { state = 10; break; }
+                if (++i==rc) { state = -1; break; }
                 goto skipmore;
             }
         }
+    }
+    return false;
+}
+
+static int do_memoryevents(struct sandals_supervisor *s) {
+    int fd = s->pollfd[MEMORYEVENTS_INDEX].fd;
+    if (fd!=-1 && cgroup_counter_nonzero(fd, "oom_kill ", "memory.events")) {
+        s->response.size = 0;
+        response_append_raw(&s->response, "{\"status\":\"");
+        response_append_esc(&s->response, kStatusOom);
+        response_append_raw(&s->response, "\"}\n");
+        return -1;
+    }
+    return 0;
+}
+
+static int do_pidsevents(struct sandals_supervisor *s) {
+    int fd = s->pollfd[PIDSEVENTS_INDEX].fd;
+    if (fd!=-1 && cgroup_counter_nonzero(fd, "max ", "pids.events")) {
+        s->response.size = 0;
+        response_append_raw(&s->response, "{\"status\":\"");
+        response_append_esc(&s->response, kStatusPids);
+        response_append_raw(&s->response, "\"}\n");
+        return -1;
     }
     return 0;
 }
@@ -305,6 +322,8 @@ int supervisor(
 
     s.pollfd[MEMORYEVENTS_INDEX].fd = cgroup_ctx->memoryevents_fd;
     s.pollfd[MEMORYEVENTS_INDEX].events = POLLPRI;
+    s.pollfd[PIDSEVENTS_INDEX].fd = cgroup_ctx->pidsevents_fd;
+    s.pollfd[PIDSEVENTS_INDEX].events = POLLPRI;
     s.pollfd[STATUSFIFO_INDEX].fd = -1;
     s.pollfd[STATUSFIFO_INDEX].events = POLLIN;
     s.pollfd[TIMER_INDEX].fd = timer_fd;
@@ -318,6 +337,8 @@ int supervisor(
 
         if (s.pollfd[MEMORYEVENTS_INDEX].revents && do_memoryevents(&s)) break;
 
+        if (s.pollfd[PIDSEVENTS_INDEX].revents && do_pidsevents(&s)) break;
+
         if (s.pollfd[STATUSFIFO_INDEX].revents && do_statusfifo(&s)) break;
 
         if (s.pollfd[TIMER_INDEX].revents) {
@@ -328,7 +349,15 @@ int supervisor(
             break;
         }
 
-        if (s.pollfd[SPAWNEROUT_INDEX].revents && do_spawnerout(&s)) break;
+        if (s.pollfd[SPAWNEROUT_INDEX].revents && do_spawnerout(&s)) {
+            // Cgroup event notifications are asynchronous;
+            // ex: when pids.max limit is hit, a job is queued to
+            // wake up pollers. Luckily, the state reported through
+            // pids.max and alike is updated synchronously.
+            do_pidsevents(&s);
+            do_memoryevents(&s);
+            break;
+        }
 
         if (do_pipes(&s)) break;
     }
