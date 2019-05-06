@@ -1,7 +1,8 @@
 {
-    "cmd": [ "sh", "-xc", "(ifconfig;hostname;pstree -p;cat /proc/self/cgroup;ls /proc/1/fd;exit 42) > /tmp/@stdout 2>&1" ],
+    "cmd": [ "sh", "-xc", "ifconfig;hostname;pstree -p;cat /proc/self/cgroup;ls /proc/1/fd;exit 42" ],
     "pipes": [
-        { "file": "/proc/self/fd/1", "fifo": "/tmp/@stdout" }
+        { "file": "/dev/stdout", "stdout": true },
+        { "file": "/dev/stderr", "stderr": true }
     ],
     "mounts": [
         { "type": "tmpfs", "dest": "/tmp" },

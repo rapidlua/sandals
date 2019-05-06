@@ -1,5 +1,6 @@
 #pragma once
 #include "jstr/jstr.h"
+#include <stdbool.h>
 #include <unistd.h>
 #include <limits.h>
 
@@ -80,6 +81,8 @@ void map_user_and_group_complete(
 struct sandals_pipe {
     const char *file;
     const char *fifo;
+    bool stdout;
+    bool stderr;
     long limit;
 };
 

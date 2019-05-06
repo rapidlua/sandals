@@ -35,6 +35,13 @@ void pipe_foreach(
                         "%s[%d].%s: expecting a string",
                         kPipesKey, index, key);
                 *dest = jstr_value(i+1);
+            } else if ((dest = match_key(key,
+                "stdout", &pipe.stdout, "stderr", &pipe.stderr, NULL))
+            ) {
+                jstr_type_t t = jstr_type(i+1);
+                if (!(t&(JSTR_TRUE|JSTR_FALSE))) fail(kStatusRequestInvalid,
+                    "%s[%d].%s: expecting a boolean", kPipesKey, index, key);
+                *(bool *)dest = t==JSTR_TRUE;
             } else if (!strcmp(key, "limit")) {
                 double v;
                 if (jstr_type(i+1)!=JSTR_NUMBER
@@ -50,9 +57,10 @@ void pipe_foreach(
         if (!pipe.file)
             fail(kStatusRequestInvalid,
                 "%s[%d]: 'file' missing", kPipesKey, index);
-        if (!pipe.fifo)
+        if (!pipe.stdout && !pipe.stderr && !pipe.fifo)
             fail(kStatusRequestInvalid,
-                "%s[%d]: 'fifo' missing", kPipesKey, index);
+                "%s[%d]: 'stdout', 'stderr' or 'fifo' is required",
+                kPipesKey, index);
         fn(index++, &pipe, userdata);
     }
 }

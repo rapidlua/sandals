@@ -17,20 +17,37 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-static int do_create_fifo(const char *path) {
-    if (mkfifo(path, 0600) == -1)
-        fail(kStatusInternalError,
-            "Creating fifo '%s': %s", path, strerror(errno));
-    return open_checked(path, O_RDONLY|O_NOCTTY|O_CLOEXEC|O_NONBLOCK, 0);
-}
+static int childstdout_fd;
+static int childstderr_fd;
 
-static void create_fifo(
+static void create_pipe(
     int index, const struct sandals_pipe *pipe, int fd[]) {
 
-    fd[index] = do_create_fifo(pipe->fifo);
+    int pipe_fd[2];
+
+    if (pipe->fifo) {
+        if (mkfifo(pipe->fifo, 0600) == -1)
+            fail(kStatusInternalError,
+                "Creating fifo '%s': %s", pipe->fifo, strerror(errno));
+        pipe_fd[0] = open_checked(
+            pipe->fifo, O_RDONLY|O_NOCTTY|O_CLOEXEC|O_NONBLOCK, 0);
+        if (pipe->stdout || pipe->stderr)
+            pipe_fd[1] = open_checked(
+                pipe->fifo, O_WRONLY|O_NOCTTY|O_CLOEXEC, 0);
+    } else {
+        if (pipe2(pipe_fd, O_CLOEXEC) == -1)
+            fail(kStatusInternalError, "pipe2: %s", strerror(errno));
+        if (fcntl(pipe_fd[0], F_SETFL, O_NONBLOCK) == -1)
+            fail(kStatusInternalError, "fcntl(F_SETFL, O_NONBLOCK): %s",
+                strerror(errno));
+    }
+
+    if (pipe->stdout) childstdout_fd = pipe_fd[1];
+    if (pipe->stderr) childstderr_fd = pipe_fd[1];
+    fd[index] = pipe_fd[0];
 }
 
-static void create_fifos(
+static void create_pipes(
     const struct sandals_request *request, struct msghdr *msghdr) {
 
     size_t npipes, sizefds;
@@ -50,7 +67,7 @@ static void create_fifos(
     cmsghdr->cmsg_type = SCM_RIGHTS;
     cmsghdr->cmsg_len = CMSG_LEN(sizefds);
 
-    pipe_foreach(request, create_fifo, (int*)CMSG_DATA(cmsghdr));
+    pipe_foreach(request, create_pipe, (int*)CMSG_DATA(cmsghdr));
 }
 
 static void configure_seccomp(
@@ -80,6 +97,7 @@ int spawner(const struct sandals_request *request) {
 
     // open /dev/null, strictly before altering mounts
     devnull_fd = open_checked("/dev/null", O_CLOEXEC|O_RDWR|O_NOCTTY, 0);
+    childstdout_fd = childstderr_fd = devnull_fd;
 
     // strictly before altering mounts - /proc may disappear
     map_user_and_group_begin(&map_user_and_group_ctx);
@@ -122,7 +140,7 @@ int spawner(const struct sandals_request *request) {
         fail(kStatusInternalError,
             "mmap(SHARED+ANONYMOUS): %s", strerror(errno));
 
-    create_fifos(request, &msghdr); // allocates cmsg buffer
+    create_pipes(request, &msghdr); // allocates cmsg buffer
 
     // send file descriptors to supervisor
     if (msghdr.msg_control) {
@@ -142,8 +160,8 @@ int spawner(const struct sandals_request *request) {
         fail(kStatusInternalError, "fork: %s", strerror(errno));
     case 0:
         dup3(devnull_fd, STDIN_FILENO, 0) != -1
-        && dup3(devnull_fd, STDOUT_FILENO, 0) != -1
-        && dup3(devnull_fd, STDERR_FILENO, 0) != -1
+        && dup3(childstdout_fd, STDOUT_FILENO, 0) != -1
+        && dup3(childstderr_fd, STDERR_FILENO, 0) != -1
         && (!sock_fprog.len || prctl(
             PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &sock_fprog, 0, 0) != -1)
         && execvpe(request->cmd[0], (char **)request->cmd, (char **)request->env);

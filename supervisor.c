@@ -15,8 +15,7 @@
 #include <unistd.h>
 
 struct sandals_sink {
-    const char *file;
-    const char *fifo;
+    struct sandals_pipe pipe;
     int fd;
     int splice;
     long limit;
@@ -26,8 +25,9 @@ static void sink_init(
     int index, const struct sandals_pipe *pipe,
     struct sandals_sink *sink) {
 
-    sink[index].file = pipe->file;
-    sink[index].fifo = pipe->fifo;
+    sink[index].pipe = *pipe;
+    if (!pipe->fifo)
+        sink[index].pipe.fifo = pipe->stdout ? "@stdout" : "@stderr";
     sink[index].fd = open_checked(
         pipe->file, O_CLOEXEC|O_WRONLY|O_TRUNC|O_CREAT|O_NOCTTY, 0600);
     sink[index].splice = 1;
@@ -192,7 +192,8 @@ static int do_pipes(struct sandals_supervisor *s) {
                 if (errno==EINVAL) { sink->splice = 0; ++i; continue; }
                 if (errno==EAGAIN) continue;
                 fail(kStatusInternalError,
-                    "Writing '%s': %s", sink->file, strerror(errno));
+                    "Splicing '%s' and '%s': %s",
+                    sink->pipe.fifo, sink->pipe.file, strerror(errno));
             }
         } else {
             char buf[PIPE_BUF];
@@ -200,7 +201,7 @@ static int do_pipes(struct sandals_supervisor *s) {
             if ((rc = read(s->pollfd[i].fd, buf, sizeof buf)) == -1) {
                 if (errno==EAGAIN || errno==EWOULDBLOCK) continue;
                 fail(kStatusInternalError,
-                    "Reading '%s': %s", sink->fifo, strerror(errno));
+                    "Reading '%s': %s", sink->pipe.fifo, strerror(errno));
             }
             p = buf; e = buf+(rc > sink->limit ? sink->limit : rc);
             while (p != e) {
@@ -208,7 +209,7 @@ static int do_pipes(struct sandals_supervisor *s) {
                 if (sizewr==-1) {
                     if (errno==EINTR) continue;
                     fail(kStatusInternalError,
-                        "Writing '%s': %s", sink->file, strerror(errno));
+                        "Writing '%s': %s", sink->pipe.file, strerror(errno));
                 }
                 p += sizewr;
             }
@@ -225,10 +226,6 @@ static int do_pipes(struct sandals_supervisor *s) {
                 s->response.size = 0;
                 response_append_raw(&s->response, "{\"status\":\"");
                 response_append_esc(&s->response, kStatusFileLimit);
-                response_append_raw(&s->response, "\",\"fifo\":\"");
-                response_append_esc(&s->response, sink->fifo);
-                response_append_raw(&s->response, "\",\"file\":\"");
-                response_append_esc(&s->response, sink->file);
                 response_append_raw(&s->response, "\"}\n");
                 status = -1;
             }
