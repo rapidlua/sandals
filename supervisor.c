@@ -1,5 +1,7 @@
 #define _GNU_SOURCE
 #include "sandals.h"
+#include "stdstreams.h"
+#include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <poll.h>
@@ -12,6 +14,7 @@
 #include <sys/stat.h>
 #include <sys/timerfd.h>
 #include <sys/types.h>
+#include <sys/un.h>
 #include <unistd.h>
 
 struct sandals_sink {
@@ -28,10 +31,10 @@ static void sink_init(
     sink[index].pipe = *pipe;
     if (!pipe->fifo)
         sink[index].pipe.fifo = pipe->stdout ? "@stdout" : "@stderr";
-    sink[index].fd = open_checked(
-        pipe->file, O_CLOEXEC|O_WRONLY|O_TRUNC|O_CREAT|O_NOCTTY, 0600);
     sink[index].splice = 1;
     sink[index].limit = pipe->limit;
+    sink[index].fd = open_checked(
+        pipe->file, O_CLOEXEC|O_WRONLY|O_TRUNC|O_CREAT|O_NOCTTY, 0600);
     // We depend on fd being in blocking IO mode. This is guaranteed
     // since we are explicitly requesting this mode via open() flags
     // (even when opening /proc/self/fd/*).
@@ -42,11 +45,12 @@ enum {
     PIDSEVENTS_INDEX,
     TIMER_INDEX,
     SPAWNEROUT_INDEX,
-    PIPE0_INDEX
+    STDSTREAMS_INDEX,
+    PIPE0_INDEX // assumption: STDSTREAMS_INDEX+1 == PIPE0_INDEX
 };
 
 //           MEMORYEVENTS
-//          /        PIPE0
+//          /        STDSTREAMS
 //         /        /
 // pollfd [.....................]
 // sink            [............]
@@ -59,7 +63,9 @@ struct sandals_supervisor {
     int npollfd;
     struct sandals_sink *sink;
     struct pollfd *pollfd;
-    void *cmsgbuf;
+    char *spawnerout_cmsgbuf;
+    char *stdstreams_recvbuf;
+    socklen_t stdstreams_szrecvbuf;
     struct sandals_response response;
 };
 
@@ -137,8 +143,8 @@ static int do_spawnerout(struct sandals_supervisor *s) {
     struct msghdr msghdr = {
         .msg_iov = &iovec,
         .msg_iovlen = 1,
-        .msg_control = s->cmsgbuf,
-        .msg_controllen = CMSG_SPACE(sizeof(int)*(2+s->npipe))
+        .msg_control = s->spawnerout_cmsgbuf,
+        .msg_controllen = CMSG_SPACE(sizeof(int)*(1+s->npipe))
     };
     struct cmsghdr *cmsghdr;
     ssize_t rc = recvmsg(
@@ -157,9 +163,9 @@ static int do_spawnerout(struct sandals_supervisor *s) {
         && cmsghdr->cmsg_level == SOL_SOCKET
         && cmsghdr->cmsg_type == SCM_RIGHTS
         && cmsghdr->cmsg_len == CMSG_LEN(sizeof(int)
-            *(s->npipe))
+            *(s->npipe + (s->request->stdstreams_file!=NULL)))
     ) {
-        // Unpack PIPE0 ... PIPEn
+        // Unpack PIPE0 ... PIPEn, STDSTREAMSSOCKET?
         // (transmitted in this order).
         const int *fd = (const int *)CMSG_DATA(cmsghdr);
         for (int i = 0; i < s->npipe; ++i) {
@@ -168,6 +174,9 @@ static int do_spawnerout(struct sandals_supervisor *s) {
             s->pollfd[PIPE0_INDEX+i].revents = 0;
         };
         s->npollfd = PIPE0_INDEX+s->npipe;
+        if (s->request->stdstreams_file) {
+            s->pollfd[STDSTREAMS_INDEX].fd = fd[s->npipe];
+        }
         return 0;
     }
     s->response.size += rc;
@@ -175,15 +184,58 @@ static int do_spawnerout(struct sandals_supervisor *s) {
     return s->response.buf[s->response.size-1] == '\n';
 }
 
+static ssize_t receive_stdstreams_packet(struct sandals_supervisor *s) {
+    int fd = s->pollfd[STDSTREAMS_INDEX].fd;
+    if (!s->stdstreams_szrecvbuf) {
+        socklen_t len = sizeof(s->stdstreams_szrecvbuf);
+        if (getsockopt(
+            fd, SOL_SOCKET, SO_RCVBUF, &s->stdstreams_szrecvbuf, &len) == -1
+        ) fail(kStatusInternalError, "getsockopt: %s", strerror(errno));
+        if (!(s->stdstreams_recvbuf =
+            malloc(sizeof(uint32_t)+s->stdstreams_szrecvbuf))
+        ) fail(kStatusInternalError, "malloc");
+    }
+    do {
+        struct sockaddr_un addr;
+        socklen_t addr_len = sizeof(addr);
+        ssize_t rc = recvfrom(
+            fd, s->stdstreams_recvbuf+sizeof(uint32_t),
+            s->stdstreams_szrecvbuf, MSG_DONTWAIT,
+            (struct sockaddr*)&addr, &addr_len);
+
+        if (rc <= 0) return rc;
+
+        addr_len -= offsetof(struct sockaddr_un, sun_path);
+
+        if (addr_len == sizeof(kStdoutAddr)
+            && !memcmp(kStdoutAddr, addr.sun_path, sizeof(kStdoutAddr))
+        ) {
+            *(uint32_t *)s->stdstreams_recvbuf = htonl(rc);
+            return rc+sizeof(uint32_t);
+        }
+
+        if (addr_len == sizeof(kStderrAddr)
+            && !memcmp(kStderrAddr, addr.sun_path, sizeof(kStderrAddr))
+        ) {
+            *(uint32_t *)s->stdstreams_recvbuf = htonl(UINT32_C(0x80000000)|rc);
+            return rc+sizeof(uint32_t);
+        }
+
+    } while (s->exiting);
+    // Packet rejected because source address didn't match.
+    // Don't retry recvfrom() since otherwize adversary may flood us with
+    // messages and evade the time limit.
+    errno = EWOULDBLOCK;
+    return -1;
+}
+
 static int do_pipes(struct sandals_supervisor *s) {
     int status = 0;
-    // If multiple pipes exceeded their limit, report the first one
-    // (that's why we are processing them in reverse order.)
-    for (int i = s->npollfd; --i >= PIPE0_INDEX; ) {
+    for (int i = s->npollfd; --i >= STDSTREAMS_INDEX; ) {
         if (s->pollfd[i].fd==-1 || !s->pollfd[i].revents && !s->exiting)
             continue;
         ssize_t rc;
-        struct sandals_sink *sink  = s->sink+i-PIPE0_INDEX;
+        struct sandals_sink *sink  = s->sink+i-STDSTREAMS_INDEX;
         if (sink->limit && sink->splice) {
             if ((rc = splice(
                 s->pollfd[i].fd, NULL, sink->fd, NULL, sink->limit,
@@ -198,12 +250,19 @@ static int do_pipes(struct sandals_supervisor *s) {
         } else {
             char buf[PIPE_BUF];
             char *p, *e;
-            if ((rc = read(s->pollfd[i].fd, buf, sizeof buf)) == -1) {
+            if (i==STDSTREAMS_INDEX) {
+                rc = receive_stdstreams_packet(s);
+                p = s->stdstreams_recvbuf;
+            } else {
+                rc = read(s->pollfd[i].fd, buf, sizeof buf);
+                p = buf;
+            }
+            if (rc == -1) {
                 if (errno==EAGAIN || errno==EWOULDBLOCK) continue;
                 fail(kStatusInternalError,
                     "Reading '%s': %s", sink->pipe.fifo, strerror(errno));
             }
-            p = buf; e = buf+(rc > sink->limit ? sink->limit : rc);
+            e = p+(rc > sink->limit ? sink->limit : rc);
             while (p != e) {
                 ssize_t sizewr = write(sink->fd, p, e-p);
                 if (sizewr==-1) {
@@ -247,18 +306,30 @@ int supervisor(
     s.request = request;
     s.npipe = pipe_count(request);
     s.npollfd = PIPE0_INDEX;
-    if (!(s.sink = malloc(sizeof(struct sandals_sink)*s.npipe
+    if (!(s.sink = malloc(sizeof(struct sandals_sink)*(1+s.npipe)
         +sizeof(struct pollfd)*(PIPE0_INDEX+s.npipe)
         +CMSG_SPACE(sizeof(int)*(1+s.npipe)))
     )) fail(kStatusInternalError, "malloc");
-    s.pollfd = (struct pollfd *)(s.sink+s.npipe);
-    s.cmsgbuf = s.pollfd+PIPE0_INDEX+s.npipe;
+    s.pollfd = (struct pollfd *)(s.sink+1+s.npipe);
+    s.spawnerout_cmsgbuf = (void *)(s.pollfd+PIPE0_INDEX+s.npipe);
+    s.stdstreams_recvbuf = NULL;
+    s.stdstreams_szrecvbuf = 0;
     s.response.size = 0;
 
     // User may trick us into re-opening any object we've created (using
     // /proc/self/fd/* paths). Fortunately, timers and sockets can't be
     // reopened (but pipes can!)
-    pipe_foreach(request, sink_init, s.sink);
+    pipe_foreach(request, sink_init, s.sink+1);
+
+    if (request->stdstreams_file) {
+        struct sandals_pipe pipe = {
+            .file = request->stdstreams_file,
+            .limit = request->stdstreams_limit,
+            .fifo = "@stdstreams"
+        };
+        sink_init(0, &pipe, s.sink);
+        s.sink[0].splice = 0;
+    }
 
     if ((timer_fd = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC)) == -1)
         fail(kStatusInternalError, "Create timer: %s", strerror(errno));
@@ -273,6 +344,8 @@ int supervisor(
     s.pollfd[TIMER_INDEX].events = POLLIN;
     s.pollfd[SPAWNEROUT_INDEX].fd = spawnerout_fd;
     s.pollfd[SPAWNEROUT_INDEX].events = POLLIN;
+    s.pollfd[STDSTREAMS_INDEX].fd = -1;
+    s.pollfd[STDSTREAMS_INDEX].events = POLLIN;
 
     for (;;) {
         if (poll(s.pollfd, s.npollfd, -1) == -1 && errno != EINTR)

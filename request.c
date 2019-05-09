@@ -79,6 +79,32 @@ void request_parse(struct sandals_request *request, const jstr_token_t *root) {
                 fail(kStatusRequestInvalid, "%s: expecting an object", key);
             tok = jstr_next(request->cgroup_config = tok+1);
 
+        } else if (!strcmp(key, "stdStreams")) {
+            const jstr_token_t *i;
+            if (jstr_type(tok+1) != JSTR_OBJECT)
+                fail(kStatusRequestInvalid, "%s: expecting an object", key);
+            for (i = tok+2, tok = jstr_next(tok+1); i != tok; i+=2) {
+                const char *k2 = jstr_value(i);
+                if (!strcmp(k2, "file")) {
+                    if (jstr_type(i+1) != JSTR_STRING)
+                        fail(kStatusRequestInvalid,
+                            "%s.%s: expecting a string", key, k2);
+                    request->stdstreams_file = jstr_value(i+1);
+                } else if (!strcmp(k2, "limit")) {
+                    double v;
+                    if (jstr_type(i+1) != JSTR_NUMBER
+                        || (v = strtod(jstr_value(i+1), NULL)) < 0.0
+                    ) fail(kStatusRequestInvalid,
+                        "%s.%s: expecting non-negative number",
+                        key, k2);
+                    request->stdstreams_limit =
+                        v < LONG_MAX ? (long)v : LONG_MAX;
+                } else fail(
+                    kStatusRequestInvalid, "%s: unknown key '%s'", key, k2);
+            }
+            if (!request->stdstreams_file)
+                fail(kStatusRequestInvalid, "%s: 'file' is required", key);
+
         } else if (!strcmp(key, "vaRandomize")) {
             jstr_type_t t = jstr_type(tok+1);
             if (!(t&(JSTR_TRUE|JSTR_FALSE)))

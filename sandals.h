@@ -37,6 +37,8 @@ struct sandals_request {
     const char **env;
     const char *work_dir;
     struct timespec time_limit;
+    const char *stdstreams_file;
+    long stdstreams_limit;
     const jstr_token_t *pipes;
 };
 

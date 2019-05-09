@@ -1,5 +1,6 @@
 #define _GNU_SOURCE
 #include "sandals.h"
+#include "stdstreams.h"
 #include "kafel/include/kafel.h"
 #include <errno.h>
 #include <fcntl.h>
@@ -14,13 +15,14 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/un.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
 static int childstdout_fd;
 static int childstderr_fd;
 
-static void create_pipe(
+static void make_pipe(
     int index, const struct sandals_pipe *pipe, int fd[]) {
 
     int pipe_fd[2];
@@ -47,6 +49,29 @@ static void create_pipe(
     fd[index] = pipe_fd[0];
 }
 
+static int make_socket(const void *addr, socklen_t addrlen) {
+    struct sockaddr_un addr_un;
+    int fd = socket(AF_UNIX, SOCK_DGRAM, 0);
+    if (fd==-1) fail(kStatusInternalError, "socket: %s", strerror(errno));
+    addr_un.sun_family = AF_UNIX;
+    memcpy(addr_un.sun_path, addr, addrlen);
+    if (bind(
+        fd, (struct sockaddr *)&addr_un,
+        addrlen+offsetof(struct sockaddr_un, sun_path))==-1
+    ) fail(kStatusInternalError, "bind: %s", strerror(errno));
+    return fd;
+}
+
+static void connect_checked(int fd, const void *addr, socklen_t addrlen) {
+    struct sockaddr_un addr_un;
+    addr_un.sun_family = AF_UNIX;
+    memcpy(addr_un.sun_path, addr, addrlen);
+    if (connect(
+        fd, (struct sockaddr *)&addr_un,
+        addrlen+offsetof(struct sockaddr_un, sun_path))==-1
+    ) fail(kStatusInternalError, "connect: %s", strerror(errno));
+}
+
 static void create_pipes(
     const struct sandals_request *request, struct msghdr *msghdr) {
 
@@ -54,7 +79,7 @@ static void create_pipes(
     struct cmsghdr *cmsghdr;
 
     npipes = pipe_count(request);
-    sizefds = sizeof(int)*npipes;
+    sizefds = sizeof(int)*(npipes + (request->stdstreams_file!=NULL));
 
     if (!sizefds) return;
 
@@ -67,7 +92,22 @@ static void create_pipes(
     cmsghdr->cmsg_type = SCM_RIGHTS;
     cmsghdr->cmsg_len = CMSG_LEN(sizefds);
 
-    pipe_foreach(request, create_pipe, (int*)CMSG_DATA(cmsghdr));
+    pipe_foreach(request, make_pipe, (int*)CMSG_DATA(cmsghdr));
+
+    if (request->stdstreams_file) {
+        ((int*)CMSG_DATA(cmsghdr))[npipes] =
+            make_socket(kStdStreamsAddr, sizeof(kStdStreamsAddr));
+
+        childstdout_fd = make_socket(kStdoutAddr, sizeof(kStdoutAddr));
+
+        connect_checked(
+            childstdout_fd, kStdStreamsAddr, sizeof(kStdStreamsAddr));
+
+        childstderr_fd = make_socket(kStderrAddr, sizeof(kStderrAddr));
+
+        connect_checked(
+            childstderr_fd, kStdStreamsAddr, sizeof(kStdStreamsAddr));
+    }
 }
 
 static void configure_seccomp(
