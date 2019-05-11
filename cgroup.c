@@ -1,4 +1,5 @@
 #include "sandals.h"
+#include "jshelper.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <poll.h>
@@ -102,23 +103,20 @@ void create_cgroup(
 
     // apply config
     if (request->cgroup_config) {
-        const jstr_token_t *tok, *conf_end  = jstr_next(request->cgroup_config);
-        for (tok = request->cgroup_config + 1; tok != conf_end; tok += 2) {
-            const char *key = jstr_value(tok), *value;
-            int fd;
+        const char *key;
+        const jstr_token_t *value;
+        JSOBJECT_FOREACH(request->cgroup_config, key, value) {
 
-            if (jstr_type(tok+1) != JSTR_STRING)
-                fail(kStatusRequestInvalid,
-                    "%s['%s']: expecting a string", kCgroupConfigKey, key);
+            int fd;
+            const char *strval = jsget_str(request->json_root, value);
 
             while (*key=='/') ++key;
 
             if (snprintf(path_buf, sizeof path_buf, "%s/%s", cgroup_path, key)
             >= sizeof path_buf) fail(kStatusInternalError, "Path too long");
 
-            value = jstr_value(tok+1);
             fd = open_checked(path_buf, O_WRONLY|O_CLOEXEC|O_NOCTTY, 0),
-            write_checked(fd, value, strlen(value), path_buf);
+            write_checked(fd, strval, strlen(strval), path_buf);
             close(fd);
 
             if (!strncmp(key, "memory.", 7)) memoryevents = 1;

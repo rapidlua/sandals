@@ -1,129 +1,139 @@
 #include "sandals.h"
+#include "jshelper.h"
 #include <errno.h>
 #include <math.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 
-const char kMountsKey[]       = "mounts";
-const char kCgroupConfigKey[] = "cgroupConfig";
-const char kPipesKey[]        = "pipes";
-
-void *match_key(const char *str, ...) {
-    void *result = NULL;
-    va_list ap;
-    va_start(ap, str);
-    for (;;) {
-        const char *key;
-        void *dest;
-        if (!(key = va_arg(ap, const char *))) break;
-        dest = va_arg(ap, void *);
-        if (!strcmp(key, str)) { result = dest; break; }
+static const char **copy_str_array(
+    const jstr_token_t *root, const jstr_token_t *array
+) {
+    const jstr_token_t *value;
+    size_t index = 0;
+    const char **vec = malloc(
+        sizeof(vec[0]) * (1 + (jstr_next(array) - array)));
+    if (!vec) fail(kStatusInternalError, "malloc");
+    jsget_array(root, array);
+    JSARRAY_FOREACH(array, value) {
+        vec[index++] = jsget_str(root, value);
     }
-    va_end(ap);
-    return result;
+    vec[index] = NULL;
+    return vec;
 }
 
 void request_parse(struct sandals_request *request, const jstr_token_t *root) {
-    const jstr_token_t *root_end, *tok;
 
-    tok = root + 1; root_end = jstr_next(root);
-    while (tok != root_end) {
-        const char *key = jstr_value(tok);
-        void *dest;
-        if ((dest = match_key(key,
-                "hostName",      &request->host_name,
-                "domainName",    &request->domain_name,
-                "user",          &request->user,
-                "group",         &request->group,
-                "chroot",        &request->chroot,
-                "cgroupRoot",    &request->cgroup_root,
-                "seccompPolicy", &request->seccomp_policy,
-                "workDir",       &request->work_dir,
-                NULL))) {
-            if (jstr_type(tok+1) != JSTR_STRING) fail(
-                kStatusRequestInvalid, "%s: expecting a string", key);
-            *(const char **)dest = jstr_value(tok + 1); tok += 2;
+    const char *key;
+    const jstr_token_t *value, *stdstreams = NULL;
 
-        } else if ((dest = match_key(key,
-                kMountsKey, &request->mounts,
-                kPipesKey,  &request->pipes,
-                NULL))) {
-            if (jstr_type(tok+1) != JSTR_ARRAY) fail(
-                kStatusRequestInvalid, "%s: expecting an array", key);
-            *(const jstr_token_t **)dest = tok+1;
-            tok = jstr_next(tok+1);
+    request->json_root = jsget_object(NULL, root);
+    JSOBJECT_FOREACH(root, key, value) {
 
-        } else if ((dest = match_key(key,
-                "cmd",      &request->cmd,
-                "env",      &request->env,
-                NULL))) {
-            // convert json array to a NULL-terminated char* array in-place
-            const jstr_token_t *i;
-            const char **p;
-            if (jstr_type(tok+1) != JSTR_ARRAY) fail(
-                kStatusRequestInvalid, "%s: expecting an array", key);
-            p = *(const char ***)dest = (const char **)tok;
-            for (i = tok+2, tok = jstr_next(tok+1); i != tok; ++i) {
-                if (jstr_type(i) != JSTR_STRING) {
-                    fail(kStatusRequestInvalid,
-                        "%s[%zu]: expecting a string",
-                        key, (size_t)(p-*(const char ***)dest));
-                }
-                *p++ = jstr_value(i);
-            }
-            *p = NULL;
+        if (!strcmp(key, "hostName")) {
+            request->host_name = jsget_str(root, value);
+            continue;
+        }
 
-        } else if (!strcmp(key, kCgroupConfigKey)) {
-            if (jstr_type(tok+1) != JSTR_OBJECT)
-                fail(kStatusRequestInvalid, "%s: expecting an object", key);
-            tok = jstr_next(request->cgroup_config = tok+1);
+        if (!strcmp(key, "domainName")) {
+            request->domain_name = jsget_str(root, value);
+            continue;
+        }
 
-        } else if (!strcmp(key, "stdStreams")) {
-            const jstr_token_t *i;
-            if (jstr_type(tok+1) != JSTR_OBJECT)
-                fail(kStatusRequestInvalid, "%s: expecting an object", key);
-            for (i = tok+2, tok = jstr_next(tok+1); i != tok; i+=2) {
-                const char *k2 = jstr_value(i);
-                if (!strcmp(k2, "file")) {
-                    if (jstr_type(i+1) != JSTR_STRING)
-                        fail(kStatusRequestInvalid,
-                            "%s.%s: expecting a string", key, k2);
-                    request->stdstreams_file = jstr_value(i+1);
-                } else if (!strcmp(k2, "limit")) {
-                    double v;
-                    if (jstr_type(i+1) != JSTR_NUMBER
-                        || (v = strtod(jstr_value(i+1), NULL)) < 0.0
-                    ) fail(kStatusRequestInvalid,
-                        "%s.%s: expecting non-negative number",
-                        key, k2);
-                    request->stdstreams_limit =
-                        v < LONG_MAX ? (long)v : LONG_MAX;
-                } else fail(
-                    kStatusRequestInvalid, "%s: unknown key '%s'", key, k2);
-            }
-            if (!request->stdstreams_file)
-                fail(kStatusRequestInvalid, "%s: 'file' is required", key);
+        if (!strcmp(key, "user")) {
+            request->user = jsget_str(root, value);
+            continue;
+        }
 
-        } else if (!strcmp(key, "vaRandomize")) {
-            jstr_type_t t = jstr_type(tok+1);
-            if (!(t&(JSTR_TRUE|JSTR_FALSE)))
-                fail(kStatusRequestInvalid, "%s: expecting a boolean", key);
-            request->va_randomize = t==JSTR_TRUE; tok += 2;
+        if (!strcmp(key, "group")) {
+            request->group = jsget_str(root, value);
+            continue;
+        }
 
-        } else if (!strcmp(key, "timeLimit")) {
-            double v;
-            if (jstr_type(tok+1) != JSTR_NUMBER
-                || (v=strtod(jstr_value(tok+1), NULL)) < 0.0
-            ) fail(kStatusRequestInvalid,
-                "%s: expecting non-negative number", key);
-            tok += 2;
+        if (!strcmp(key, "chroot")) {
+            request->chroot = jsget_str(root, value);
+            continue;
+        }
+
+        if (!strcmp(key, "mounts")) {
+            request->mounts = jsget_array(root, value);
+            continue;
+        }
+
+        if (!strcmp(key, "cgroupRoot")) {
+            request->cgroup_root = jsget_str(root, value);
+            continue;
+        }
+
+        if (!strcmp(key, "cgroupConfig")) {
+            request->cgroup_config = jsget_object(root, value);
+            continue;
+        }
+
+        if (!strcmp(key, "seccompPolicy")) {
+            request->seccomp_policy = jsget_str(root, value);
+            continue;
+        }
+
+        if (!strcmp(key, "vaRandomize")) {
+            request->va_randomize = jsget_bool(root, value);
+            continue;
+        }
+
+        if (!strcmp(key, "cmd")) {
+            request->cmd = copy_str_array(root, value);
+            continue;
+        }
+
+        if (!strcmp(key, "env")) {
+            request->env = copy_str_array(root, value);
+            continue;
+        }
+
+        if (!strcmp(key, "workDir")) {
+            request->work_dir = jsget_str(root, value);
+            continue;
+        }
+
+        if (!strcmp(key, "timeLimit")) {
+            double v = jsget_udouble(root, value);
             request->time_limit.tv_nsec = (long)(modf(v, &v)*1e9);
             // time_t===long in GNU and MUSL C library
             request->time_limit.tv_sec =
                 v > LONG_MAX ? (time_t)LONG_MAX : (time_t)v;
+            continue;
+        }
 
-        } else fail(kStatusRequestInvalid, "Unknown key '%s'", key);
+        if (!strcmp(key, "stdStreams")) {
+            stdstreams = jsget_object(root, value);
+            continue;
+        }
+
+        if (!strcmp(key, "pipes")) {
+            request->pipes = jsget_array(root, value);
+            continue;
+        }
+
+        jsunknown(root, value);
+    }
+
+    if (stdstreams) {
+        JSOBJECT_FOREACH(stdstreams, key, value) {
+            if (!strcmp(key, "file")) {
+                request->stdstreams_file = jsget_str(root, value);
+                continue;
+            }
+            if (!strcmp(key, "limit")) {
+                double v = jsget_udouble(root, value);
+                request->stdstreams_limit =
+                    v < LONG_MAX ? (long)v : LONG_MAX;
+                continue;
+            }
+            jsunknown(root, value);
+        }
+
+        if (!request->stdstreams_file)
+            jserror(root, stdstreams, "'file' missing");
     }
 
     if (!request->cmd || !request->cmd[0])
@@ -164,8 +174,6 @@ void request_recv(struct sandals_request *request) {
     }
     if (rc < 0 || (size_t)data_size != rc)
         fail(kStatusRequestInvalid, NULL);
-    if (jstr_type(root) != JSTR_OBJECT)
-        fail(kStatusRequestInvalid, "Expecting an object");
 
     request_parse(request, root);
 }

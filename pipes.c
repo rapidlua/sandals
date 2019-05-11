@@ -1,66 +1,67 @@
 #include "sandals.h"
+#include "jshelper.h"
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
 
 int pipe_count(const struct sandals_request *request) {
-    const jstr_token_t *pipes_end, *tok;
+    const jstr_token_t *item;
     int count = 0;
     if (!request->pipes) return 0;
-    pipes_end = jstr_next(request->pipes);
-    for (tok = request->pipes+1; tok != pipes_end; tok = jstr_next(tok))
-        ++count;
+    JSARRAY_FOREACH(request->pipes, item) count++;
     return count;
 }
 
 void pipe_foreach(
     const struct sandals_request *request, void(*fn)(), void *userdata) {
 
-    const jstr_token_t *pipes_end, *tok, *i;
-    int index=0;
+    const jstr_token_t *pipedef, *value;
+    const char *key;
+    int index = 0;
+
     if (!request->pipes) return;
-    pipes_end = jstr_next(request->pipes);
-    for (tok = request->pipes+1; tok != pipes_end; ) {
+    JSARRAY_FOREACH(request->pipes, pipedef) {
+
         struct sandals_pipe pipe = { .limit = LONG_MAX };
-        if (jstr_type(tok)!=JSTR_OBJECT)
-            fail(kStatusRequestInvalid,
-                "%s[%d]: expecting an object", kPipesKey, index);
-        for (i=tok+1, tok=jstr_next(tok); i!=tok; i+=2) {
-            const char *key = jstr_value(i), **dest;
-            if ((dest = match_key(key,
-                "file", &pipe.file, "fifo", &pipe.fifo, NULL))
-            ) {
-                if (jstr_type(i+1)!=JSTR_STRING)
-                    fail(kStatusRequestInvalid,
-                        "%s[%d].%s: expecting a string",
-                        kPipesKey, index, key);
-                *dest = jstr_value(i+1);
-            } else if ((dest = match_key(key,
-                "stdout", &pipe.stdout, "stderr", &pipe.stderr, NULL))
-            ) {
-                jstr_type_t t = jstr_type(i+1);
-                if (!(t&(JSTR_TRUE|JSTR_FALSE))) fail(kStatusRequestInvalid,
-                    "%s[%d].%s: expecting a boolean", kPipesKey, index, key);
-                *(bool *)dest = t==JSTR_TRUE;
-            } else if (!strcmp(key, "limit")) {
-                double v;
-                if (jstr_type(i+1)!=JSTR_NUMBER
-                    || (v=strtod(jstr_value(i+1), NULL)) < 0.0
-                ) fail(kStatusRequestInvalid,
-                    "%s[%d].%s: expecting non-negative number",
-                    kPipesKey, index, key);
+        jsget_object(request->json_root, pipedef);
+        JSOBJECT_FOREACH(pipedef, key, value) {
+
+            if (!strcmp(key, "file")) {
+                pipe.file = jsget_str(request->json_root, value);
+                continue;
+            }
+
+            if (!strcmp(key, "fifo")) {
+                pipe.fifo = jsget_str(request->json_root, value);
+                continue;
+            }
+
+            if (!strcmp(key, "stdout")) {
+                pipe.stdout = jsget_bool(request->json_root, value);
+                continue;
+            }
+
+            if (!strcmp(key, "stderr")) {
+                pipe.stderr = jsget_bool(request->json_root, value);
+                continue;
+            }
+
+            if (!strcmp(key, "limit")) {
+                double v = jsget_udouble(request->json_root, value);
                 pipe.limit = v < LONG_MAX ? (long)v : LONG_MAX;
-            } else
-                fail(kStatusRequestInvalid,
-                    "%s[%d]: unknown key '%s'", kPipesKey, index, key);
+                continue;
+            }
+
+            jsunknown(request->json_root, value);
         }
+
         if (!pipe.file)
-            fail(kStatusRequestInvalid,
-                "%s[%d]: 'file' missing", kPipesKey, index);
+            jserror(request->json_root, pipedef, "'file' missing");
+
         if (!pipe.stdout && !pipe.stderr && !pipe.fifo)
-            fail(kStatusRequestInvalid,
-                "%s[%d]: 'stdout', 'stderr' or 'fifo' is required",
-                kPipesKey, index);
+            jserror(request->json_root, pipedef,
+                "'stdout' or 'stderr' or 'fifo' is required");
+
         fn(index++, &pipe, userdata);
     }
 }

@@ -1,6 +1,6 @@
 OBJS += sandals.o request.o response.o fail.o file.o net.o mounts.o
 OBJS += cgroup.o pipes.o usrgrp.o supervisor.o spawner.o jstr/jstr.o
-OBJS += stdstreams.o
+OBJS += stdstreams.o jshelper.c
 
 sandals: ${OBJS} kafel/libkafel.a
 

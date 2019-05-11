@@ -23,6 +23,7 @@ extern const char kStatusRequestInvalid[]; // = "requestInvalid"
 extern const char kStatusResponseTooBig[]; // = "responseTooBig"
 
 struct sandals_request {
+
     const char *host_name;
     const char *domain_name;
     const char *user;
@@ -40,13 +41,10 @@ struct sandals_request {
     const char *stdstreams_file;
     long stdstreams_limit;
     const jstr_token_t *pipes;
+
+    /* for computing paths in error reporting */
+    const jstr_token_t *json_root;
 };
-
-extern const char kMountsKey[];       // = "mounts"
-extern const char kCgroupConfigKey[]; // = "cgroupConfig"
-extern const char kPipesKey[];        // = "pipes"
-
-void *match_key(const char *str, ...) __attribute__((sentinel));
 
 void request_recv(struct sandals_request *request);
 

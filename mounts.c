@@ -1,4 +1,5 @@
 #include "sandals.h"
+#include "jshelper.h"
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
@@ -22,53 +23,53 @@ static void create_dirs(char *path) {
 
 void do_mounts(const struct sandals_request *request) {
 
-    const jstr_token_t *mounts_end, *mnt, *tok;
-    if (!request->mounts) return;
+    const jstr_token_t *mntdef, *value;
+    const char *key;
 
-    mounts_end = jstr_next(request->mounts);
-    mnt = request->mounts + 1;
-    for (size_t i = 0; mnt != mounts_end; ++i) {
+    if (!request->mounts) return;
+    JSARRAY_FOREACH(request->mounts, mntdef) {
 
         const char *type = NULL, *src = NULL, *dest = NULL, *options = "";
         int flags = 0, ro = 0, create_missing = 1;
         char chrooted_dest[PATH_MAX];
 
-        if (jstr_type(mnt) != JSTR_OBJECT)
-            fail(kStatusRequestInvalid,
-                "%s[%zu]: expecting an object", kMountsKey, i);
+        jsget_object(request->json_root, mntdef);
+        JSOBJECT_FOREACH(mntdef, key, value) {
 
-        for (tok = mnt+1, mnt = jstr_next(mnt); tok != mnt; tok += 2) {
-            const char *key = jstr_value(tok);
-            const char **pv;
-            if ((pv = match_key(key,
-                        "type", &type, "src", &src, "dest", &dest,
-                        "options", &options,
-                        NULL))) {
-                if (jstr_type(tok+1) != JSTR_STRING)
-                    fail(kStatusRequestInvalid,
-                        "%s[%zu].%s: expecting a string", kMountsKey, i, key);
-                *pv = jstr_value(tok+1);
-            } else if (!strcmp(key, "ro")) {
-                jstr_type_t t = jstr_type(tok+1);
-                if (!(t&(JSTR_TRUE|JSTR_FALSE)))
-                    fail(kStatusRequestInvalid,
-                        "%s[%zu].%s: expecting a boolean", kMountsKey, i, key);
-                ro = t==JSTR_TRUE;
-            } else {
-                fail(kStatusRequestInvalid,
-                    "%s[%zu]: unknown key '%s'", kMountsKey, i, key);
+            if (!strcmp(key, "type")) {
+                type = jsget_str(request->json_root, value);
+                continue;
             }
+
+            if (!strcmp(key, "src")) {
+                src = jsget_str(request->json_root, value);
+                continue;
+            }
+
+            if (!strcmp(key, "dest")) {
+                dest = jsget_str(request->json_root, value);
+                continue;
+            }
+
+            if (!strcmp(key, "options")) {
+                options = jsget_str(request->json_root, value);
+                continue;
+            }
+
+            if (!strcmp(key, "ro")) {
+                ro = jsget_bool(request->json_root, value);
+                continue;
+            }
+
+            jsunknown(request->json_root, value);
         }
 
-        if (!type) fail(kStatusRequestInvalid,
-            "%s[%zu]: 'type' missing", kMountsKey, i);
+        if (!type) jserror(request->json_root, mntdef, "'type' missing");
 
-        if (!dest) fail(kStatusRequestInvalid,
-            "%s[%zu]: 'dest' missing", kMountsKey, i);
+        if (!dest) jserror(request->json_root, mntdef, "'dest' missing");
 
         if (!strcmp(type, "bind")) {
-            if (!src) fail(kStatusRequestInvalid,
-                "%s[%zu]: 'src' missing", kMountsKey, i);
+            if (!src) jserror(request->json_root, mntdef, "'src' missing");
             flags = MS_BIND|MS_REC;
         } else {
             src = type;
