@@ -33,7 +33,11 @@ int main(int argc) {
         .stdstreams_limit = LONG_MAX,
         .time_limit       = { .tv_sec = LONG_MAX }
     };
-    struct cgroup_ctx cgroup_ctx;
+    struct cgroup_ctx cgroup_ctx = {
+        .cgroupprocs_fd = -1,
+        .pidsevents_fd = -1,
+        .memoryevents_fd = -1
+    };
 
     // otherwize log_write() becomes non-atomic
     setvbuf(stderr, NULL, _IOLBF, 0);
@@ -65,13 +69,17 @@ int main(int argc) {
         if (setsid() == -1)
             fail(kStatusInternalError, "setsid: %s", strerror(errno));
 
-        // join cgroup
-        write_checked(cgroup_ctx.cgroupprocs_fd, "0", 1, "cgroup.procs");
+        // cgroup setup (optional)
+        if (cgroup_ctx.cgroupprocs_fd != -1) {
 
-        // start new cgroup namespace
-        if (unshare(CLONE_NEWCGROUP) == -1)
-            fail(kStatusInternalError,
-                "New cgroup namespace: %s", strerror(errno));
+            // join cgroup
+            write_checked(cgroup_ctx.cgroupprocs_fd, "0", 1, "cgroup.procs");
+
+            // start new cgroup namespace
+            if (unshare(CLONE_NEWCGROUP) == -1)
+                fail(kStatusInternalError,
+                    "New cgroup namespace: %s", strerror(errno));
+        }
 
         close_stray_fds_except(spawnerout[1]);
 

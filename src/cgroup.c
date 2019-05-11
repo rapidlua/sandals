@@ -31,7 +31,7 @@ void cleanup_cgroup() {
         .fd = cgroupevents_fd,
         .events = POLLPRI
     };
-    if (!spawner_pid) return;
+    if (!spawner_pid || !cgroup_path[0]) return;
 
     // Pending cgroup cleanup will take a while. Close early explicitly
     // so that a user will get the response faster.
@@ -54,44 +54,54 @@ void cleanup_cgroup() {
     }
 }
 
-void create_cgroup(
-    const struct sandals_request *request, struct cgroup_ctx *ctx) {
-
-    const char *prefix = "", *cgroup_root = request->cgroup_root;
+static const char *do_create_cgroup(const struct sandals_request *request)
+{
     size_t len;
-    int memoryevents = 0, pidevents = 0;
-    char path_buf[PATH_MAX];
 
-    if (cgroup_root) {
-        len = strlen(cgroup_root);
-        while (len && cgroup_root[len-1]=='/') --len;
+    // use existing cgroup
+    if (request->cgroup) return request->cgroup;
+
+    if (request->cgroup_root) {
+        len = strlen(request->cgroup_root);
+        while (len && request->cgroup_root[len-1]=='/') --len;
+        if (len < sizeof(cgroup_path))
+            memcpy(cgroup_path, request->cgroup_root, len);
     } else {
         // get current cgroup and use the parent
         static const char kProcSelfCgroupPath[] = "/proc/self/cgroup";
+        static const char kSysFsCgroupPath[] = "/sys/fs/cgroup";
+        enum {
+            OFFSET = sizeof(kSysFsCgroupPath) - sizeof("0::")
+        };
+
         int fd = open_checked(
             kProcSelfCgroupPath, O_RDONLY|O_CLOEXEC|O_NOCTTY, 0);
-        ssize_t rc = read(fd, path_buf, sizeof path_buf);
+        ssize_t rc = read(
+            fd, cgroup_path + OFFSET, sizeof(cgroup_path) - OFFSET);
         if (rc < 0)
             fail(kStatusInternalError,
                 "Reading '%s': %s", kProcSelfCgroupPath, strerror(errno));
+        close(fd);
+
+        len = OFFSET + rc;
 
         // TODO validation insufficient for mixed v1/v2 configuration
-        if (rc < 3 || memcmp(path_buf, "0::", 3) || path_buf[rc-1]!='\n')
+        if (rc < 3 || memcmp(cgroup_path + OFFSET, "0::", 3)
+            || cgroup_path[len-1] != '\n'
+        ) {
             fail(kStatusInternalError,
                 "Cgroup info in '%s' too long or in Cgroups v1 format",
                 kProcSelfCgroupPath);
+        }
 
-        close(fd);
-
-        prefix = "/sys/fs/cgroup";
-        do --rc; while (rc && path_buf[rc] != '/');
-        len = rc-3;
-        cgroup_root = path_buf+3;
+        memcpy(cgroup_path, kSysFsCgroupPath, sizeof(kSysFsCgroupPath) - 1);
+        do --len; while (len && cgroup_path[len] != '/');
     }
 
     // Format cgroup_path
-    if (snprintf(cgroup_path, sizeof cgroup_path, "%s%.*s/sandals-%d",
-            prefix, (int)len, cgroup_root, getpid()) >= sizeof cgroup_path
+    if (len >= sizeof(cgroup_path)
+        || len + snprintf(cgroup_path + len, sizeof(cgroup_path) - len,
+            "/sandals-%d", getpid()) >= sizeof cgroup_path
     ) fail(kStatusInternalError, "Path too long");
 
     if (mkdir(cgroup_path, 0700) == -1)
@@ -101,27 +111,38 @@ void create_cgroup(
     // enable cleanup_cgroup() destructor
     spawner_pid = -1;
 
-    // apply config
-    if (request->cgroup_config) {
-        const char *key;
-        const jstr_token_t *value;
-        JSOBJECT_FOREACH(request->cgroup_config, key, value) {
+    return cgroup_path;
+}
 
-            int fd;
-            const char *strval = jsget_str(request->json_root, value);
+void create_cgroup(
+    const struct sandals_request *request, struct cgroup_ctx *ctx) {
 
-            while (*key=='/') ++key;
+    const char *cgroup_path;
+    const char *key;
+    const jstr_token_t *value;
+    int memoryevents = 0, pidevents = 0;
+    char path_buf[PATH_MAX];
 
-            if (snprintf(path_buf, sizeof path_buf, "%s/%s", cgroup_path, key)
-            >= sizeof path_buf) fail(kStatusInternalError, "Path too long");
+    if (!request->cgroup_config) return;
 
-            fd = open_checked(path_buf, O_WRONLY|O_CLOEXEC|O_NOCTTY, 0),
-            write_checked(fd, strval, strlen(strval), path_buf);
-            close(fd);
+    cgroup_path = do_create_cgroup(request);
 
-            if (!strncmp(key, "memory.", 7)) memoryevents = 1;
-            if (!strncmp(key, "pids.", 5)) pidevents = 1;
-        }
+    JSOBJECT_FOREACH(request->cgroup_config, key, value) {
+
+        int fd;
+        const char *strval = jsget_str(request->json_root, value);
+
+        while (*key=='/') ++key;
+
+        if (snprintf(path_buf, sizeof path_buf, "%s/%s", cgroup_path, key)
+        >= sizeof path_buf) fail(kStatusInternalError, "Path too long");
+
+        fd = open_checked(path_buf, O_WRONLY|O_CLOEXEC|O_NOCTTY, 0),
+        write_checked(fd, strval, strlen(strval), path_buf);
+        close(fd);
+
+        if (!strncmp(key, "memory.", 7)) memoryevents = 1;
+        if (!strncmp(key, "pids.", 5)) pidevents = 1;
     }
 
     // ensure we can safely append any of cgroup.procs, memory.events or
@@ -136,12 +157,14 @@ void create_cgroup(
     sprintf(path_buf, "%s%s", cgroup_path, SUFFIX("/cgroup.procs"));
     ctx->cgroupprocs_fd = open_checked(path_buf, O_WRONLY|O_CLOEXEC|O_NOCTTY, 0);
 
-    // open cgroup.events
-    sprintf(path_buf, "%s%s", cgroup_path, SUFFIX("/cgroup.events"));
-    cgroupevents_fd = open_checked(path_buf, O_RDONLY|O_CLOEXEC|O_NOCTTY, 0);
+    // open cgroup.events (iff we will have to remove the cgroup)
+    if (!request->cgroup) {
+        sprintf(path_buf, "%s%s", cgroup_path, SUFFIX("/cgroup.events"));
+        cgroupevents_fd = open_checked(
+            path_buf, O_RDONLY|O_CLOEXEC|O_NOCTTY, 0);
+    }
 
     // open memory.events
-    ctx->memoryevents_fd = -1;
     if (memoryevents) {
         sprintf(path_buf, "%s%s", cgroup_path, SUFFIX("/memory.events"));
         ctx->memoryevents_fd = open_checked(
@@ -149,7 +172,6 @@ void create_cgroup(
     }
 
     // open pids.events
-    ctx->pidsevents_fd = -1;
     if (pidevents) {
         sprintf(path_buf, "%s%s", cgroup_path, SUFFIX("/pids.events"));
         ctx->pidsevents_fd = open_checked(

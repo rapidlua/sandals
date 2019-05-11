@@ -60,6 +60,11 @@ void request_parse(struct sandals_request *request, const jstr_token_t *root) {
             continue;
         }
 
+        if (!strcmp(key, "cgroup")) {
+            request->cgroup = jsget_str(root, value);
+            continue;
+        }
+
         if (!strcmp(key, "cgroupRoot")) {
             request->cgroup_root = jsget_str(root, value);
             continue;

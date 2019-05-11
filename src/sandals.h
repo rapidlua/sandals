@@ -30,6 +30,7 @@ struct sandals_request {
     const char *group;
     const char *chroot;
     const jstr_token_t *mounts;
+    const char *cgroup;
     const char *cgroup_root;
     const jstr_token_t *cgroup_config;
     const char *seccomp_policy;
