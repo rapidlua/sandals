@@ -54,7 +54,7 @@ int main(int argc) {
             "socketpair(AF_UNIX, SOCK_STREAM): %s", strerror(errno));
     create_cgroup(&request, &cgroup_ctx);
     switch ((spawner_pid = myclone(CLONE_NEWUSER|CLONE_NEWPID|CLONE_NEWNET
-        |CLONE_NEWUTS|CLONE_NEWNS))) {
+        |CLONE_NEWUTS|CLONE_NEWNS|CLONE_NEWIPC))) {
     case -1:
         fail(kStatusInternalError, "clone: %s", strerror(errno));
     case 0:
