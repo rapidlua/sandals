@@ -1,8 +1,13 @@
-OBJS += sandals.o request.o response.o fail.o file.o net.o mounts.o
-OBJS += cgroup.o pipes.o usrgrp.o supervisor.o spawner.o jstr/jstr.o
-OBJS += stdstreams.o jshelper.c
+OBJS+=jstr/jstr.o src/cgroup.o src/fail.o src/file.o src/jshelper.o
+OBJS+=src/mounts.o src/net.o src/pipes.o src/request.o src/response.o
+OBJS+=src/sandals.o src/spawner.o src/stdstreams.o src/supervisor.o
+OBJS+=src/usrgrp.o
+
+CFLAGS?=
+CFLAGS+=-I.
 
 sandals: ${OBJS} kafel/libkafel.a
+	${CC} ${LDFLAGS} -o sandals $^
 
 clean:
 	rm -fv sandbal ${OBJS}
