@@ -13,6 +13,9 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+uid_t uid;
+gid_t gid;
+
 // clone() in libc is weird: it requires us to supply a stack for the
 // new task - the underlying syscall may work fork-style (stack COW)
 static inline int myclone(int flags) {
@@ -22,11 +25,17 @@ static inline int myclone(int flags) {
     return syscall(SYS_clone, SIGCHLD|flags, NULL);
 }
 
-int main(int argc) {
+int main(int argc)
+{
+    uid = getuid();
+    gid = getgid();
+
     int spawnerout[2];
     struct sandals_request request = {
         .host_name        = "sandals",
         .domain_name      = "sandals",
+        .uid              = uid,
+        .gid              = gid,
         .chroot           = "/",
         .va_randomize     = 1,
         .work_dir         = "/",

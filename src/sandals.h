@@ -4,10 +4,13 @@
 #include <unistd.h>
 #include <limits.h>
 
+extern uid_t uid;
+extern gid_t gid;
+extern pid_t spawner_pid;
+extern int response_fd;
+
 void log_error(const char *fmt, ...)
     __attribute__((format(printf, 1, 2)));
-
-extern int response_fd;
 
 void fail(const char *status, const char *fmt, ...)
     __attribute__((noreturn, format(printf, 2, 3)));
@@ -26,8 +29,8 @@ struct sandals_request {
 
     const char *host_name;
     const char *domain_name;
-    const char *user;
-    const char *group;
+    uid_t uid;
+    gid_t gid;;
     const char *chroot;
     const jstr_token_t *mounts;
     const char *cgroup;
@@ -68,16 +71,7 @@ void configure_net(const struct sandals_request *request);
 
 void do_mounts(const struct sandals_request *request);
 
-struct map_user_and_group_ctx {
-    int procselfuidmap_fd;
-    int procselfgidmap_fd;
-};
-
-void map_user_and_group_begin(struct map_user_and_group_ctx *ctx);
-
-void map_user_and_group_complete(
-    const struct sandals_request *request,
-    struct map_user_and_group_ctx *ctx);
+void map_user_and_group(const struct sandals_request *request);
 
 struct sandals_pipe {
     const char *file;
@@ -100,8 +94,6 @@ struct cgroup_ctx {
 
 void create_cgroup(
     const struct sandals_request *request, struct cgroup_ctx *ctx);
-
-extern pid_t spawner_pid;
 
 int supervisor(
     const struct sandals_request *request,

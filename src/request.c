@@ -40,13 +40,17 @@ void request_parse(struct sandals_request *request, const jstr_token_t *root) {
             continue;
         }
 
-        if (!strcmp(key, "user")) {
-            request->user = jsget_str(root, value);
+        if (!strcmp(key, "uid")) {
+            double v = jsget_udouble(root, value);
+            if (v > INT32_MAX) jserror(root, value, "Value too big");
+            request->uid = (uid_t)v;
             continue;
         }
 
-        if (!strcmp(key, "group")) {
-            request->group = jsget_str(root, value);
+        if (!strcmp(key, "gid")) {
+            double v = jsget_udouble(root, value);
+            if (v > INT32_MAX) jserror(root, value, "Value too big");
+            request->gid = (gid_t)v;
             continue;
         }
 

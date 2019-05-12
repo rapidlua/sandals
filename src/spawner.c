@@ -124,7 +124,6 @@ static void configure_seccomp(
 int spawner(const struct sandals_request *request) {
 
     int devnull_fd;
-    struct map_user_and_group_ctx map_user_and_group_ctx;
     struct msghdr msghdr = {};
     volatile int *exec_errno;
     struct sock_fprog sock_fprog = {};
@@ -140,7 +139,8 @@ int spawner(const struct sandals_request *request) {
     childstdout_fd = childstderr_fd = devnull_fd;
 
     // strictly before altering mounts - /proc may disappear
-    map_user_and_group_begin(&map_user_and_group_ctx);
+    // + do_mounts() requires configured uid/gid maps
+    map_user_and_group(request);
 
     // mount things
     do_mounts(request);
@@ -148,10 +148,6 @@ int spawner(const struct sandals_request *request) {
     if (chroot(request->chroot)==-1)
         fail(kStatusInternalError,
             "chroot('%s'): %s", request->chroot, strerror(errno));
-
-    // strictly after chroot - so that ${CHROOT}/etc/passwd is used to
-    // resolve user/group name
-    map_user_and_group_complete(request, &map_user_and_group_ctx);
 
     // we are exposed to untrusted children via /proc; plug the leaks
     // (strictly after map_user_and_group)
