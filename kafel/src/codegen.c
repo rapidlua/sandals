@@ -21,12 +21,11 @@
 #include "codegen.h"
 
 #include <limits.h>
+#include <linux/audit.h>
+#include <linux/seccomp.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
-
-#include <linux/audit.h>
-#include <linux/seccomp.h>
 #include <sys/queue.h>
 
 #include "common.h"
@@ -46,6 +45,12 @@
 */
 #ifndef SECCOMP_RET_LOG
 #define SECCOMP_RET_LOG 0x7ffc0000U
+#endif
+#ifndef SECCOMP_RET_KILL_PROCESS
+#define SECCOMP_RET_KILL_PROCESS 0x80000000U
+#endif
+#ifndef SECCOMP_RET_USER_NOTIF
+#define SECCOMP_RET_USER_NOTIF 0x7fc00000U
 #endif
 
 #define CURRENT_LOC (ctxt->buffer.len - 1)
@@ -69,10 +74,14 @@ static __u32 ACTION_TO_BPF(int action) {
   switch (action) {
     case ACTION_KILL:
       return SECCOMP_RET_KILL;
+    case ACTION_KILL_PROCESS:
+      return SECCOMP_RET_KILL_PROCESS;
     case ACTION_ALLOW:
       return SECCOMP_RET_ALLOW;
     case ACTION_LOG:
       return SECCOMP_RET_LOG;
+    case ACTION_USER_NOTIF:
+      return SECCOMP_RET_USER_NOTIF;
   }
   int masked_action = action & 0xfff0000;
   int value = action & 0xffff;

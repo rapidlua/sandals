@@ -22,7 +22,6 @@
 #define KAFEL_POLICY_H
 
 #include <stdint.h>
-
 #include <sys/queue.h>
 
 #include "expression.h"
@@ -38,10 +37,12 @@ TAILQ_HEAD(filterslist, syscall_filter);
 enum { POLICY_USE, POLICY_ACTION };
 
 enum {
-  ACTION_KILL = 0x1,
-  ACTION_ALLOW = 0x2,
-  ACTION_LOG =  0x4,
-  ACTION_BASIC_MAX = ACTION_LOG,
+  ACTION_KILL = 1,
+  ACTION_ALLOW,
+  ACTION_LOG,
+  ACTION_KILL_PROCESS,
+  ACTION_USER_NOTIF,
+  ACTION_BASIC_MAX = ACTION_USER_NOTIF,
   ACTION_TRAP = 0x10000,
   ACTION_ERRNO = 0x20000,
   ACTION_TRACE = 0x40000,

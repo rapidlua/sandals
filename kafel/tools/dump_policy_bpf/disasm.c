@@ -21,10 +21,9 @@
 #include "disasm.h"
 
 #include <inttypes.h>
+#include <linux/seccomp.h>
 #include <stddef.h>
 #include <stdio.h>
-
-#include <linux/seccomp.h>
 
 #define OFFSET(field) offsetof(struct seccomp_data, field)
 #define SIZE_OF(field) sizeof(((struct seccomp_data*)0)->field)
@@ -34,15 +33,14 @@
 
 void disasm_inst(const struct sock_filter* inst, const int pc) {
   const int op = BPF_OP(inst->code);
-  static const char* ops[] = {[BPF_ADD] = "+", [BPF_SUB] = "-",
-                              [BPF_MUL] = "*", [BPF_DIV] = "/",
-                              [BPF_XOR] = "^", [BPF_AND] = "&",
-                              [BPF_OR] = "|",  [BPF_RSH] = ">>",
-                              [BPF_LSH] = "<<"};
-  static const char* cmps[] = {[BPF_JGE] = ">=", [BPF_JGT] = ">",
-                               [BPF_JEQ] = "==", [BPF_JSET] = "&"};
-  static const char* cmps_neg[] = {[BPF_JGE] = "<", [BPF_JGT] = "<=",
-                                   [BPF_JEQ] = "!="};
+  static const char* ops[] = {
+      [BPF_ADD] = "+", [BPF_SUB] = "-",  [BPF_MUL] = "*",
+      [BPF_DIV] = "/", [BPF_XOR] = "^",  [BPF_AND] = "&",
+      [BPF_OR] = "|",  [BPF_RSH] = ">>", [BPF_LSH] = "<<"};
+  static const char* cmps[] = {
+      [BPF_JGE] = ">=", [BPF_JGT] = ">", [BPF_JEQ] = "==", [BPF_JSET] = "&"};
+  static const char* cmps_neg[] = {
+      [BPF_JGE] = "<", [BPF_JGT] = "<=", [BPF_JEQ] = "!="};
   printf("%3d: ", pc);
   switch (inst->code) {
     case BPF_LD | BPF_W | BPF_ABS:
@@ -103,7 +101,26 @@ void disasm_inst(const struct sock_filter* inst, const int pc) {
       break;
     case BPF_RET | BPF_K: {
       __u32 data = inst->k & SECCOMP_RET_DATA;
+#ifdef SECCOMP_RET_ACTION_FULL
+      switch (inst->k & SECCOMP_RET_ACTION_FULL) {
+#ifdef SECCOMP_RET_KILL_PROCESS
+        case SECCOMP_RET_KILL_PROCESS:
+          printf("KILL_PROCESS");
+          break;
+#endif
+#else
       switch (inst->k & SECCOMP_RET_ACTION) {
+#endif
+#ifdef SECCOMP_RET_LOG
+        case SECCOMP_RET_LOG:
+          printf("LOG");
+          break;
+#endif
+#ifdef SECCOMP_RET_USER_NOTIF
+        case SECCOMP_RET_USER_NOTIF:
+          printf("USER_NOTIFY");
+          break;
+#endif
         case SECCOMP_RET_KILL:
           printf("KILL");
           break;

@@ -6,7 +6,7 @@
 [subrepo]
 	remote = https://github.com/google/kafel.git
 	branch = master
-	commit = a30e622e5c6dadf775d60299737f5c299cfaaead
-	parent = b92ee5b6589d4c9b0977b9b6a5f734964818d5c8
+	commit = d907da7a6972a35b5636d99799af385054d14381
+	parent = 4f13f93a12473f8910b3d3b6068a40a2a1d7f565
 	method = merge
 	cmdver = 0.4.0
