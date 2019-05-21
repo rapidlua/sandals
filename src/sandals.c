@@ -78,17 +78,16 @@ int main(int argc)
         if (setsid() == -1)
             fail(kStatusInternalError, "setsid: %s", strerror(errno));
 
-        // cgroup setup (optional)
         if (cgroup_ctx.cgroupprocs_fd != -1) {
 
             // join cgroup
             write_checked(cgroup_ctx.cgroupprocs_fd, "0", 1, "cgroup.procs");
-
-            // start new cgroup namespace
-            if (unshare(CLONE_NEWCGROUP) == -1)
-                fail(kStatusInternalError,
-                    "New cgroup namespace: %s", strerror(errno));
         }
+
+        // start new cgroup namespace
+        if (unshare(CLONE_NEWCGROUP) == -1)
+            fail(kStatusInternalError,
+                "New cgroup namespace: %s", strerror(errno));
 
         close_stray_fds_except(spawnerout[1]);
 
