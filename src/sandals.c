@@ -13,9 +13,6 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-uid_t uid;
-gid_t gid;
-
 // clone() in libc is weird: it requires us to supply a stack for the
 // new task - the underlying syscall may work fork-style (stack COW)
 static inline int myclone(int flags) {
@@ -27,28 +24,21 @@ static inline int myclone(int flags) {
 
 int main(int argc)
 {
-    uid = getuid();
-    gid = getgid();
-
-    int spawnerout[2];
+    const char *env[] = { NULL };
     struct sandals_request request = {
         .host_name        = "sandals",
         .domain_name      = "sandals",
-        .uid              = uid,
-        .gid              = gid,
         .chroot           = "/",
-        .va_randomize     = 1,
+        .va_randomize     = true,
+        .env              = env,
         .work_dir         = "/",
         .stdstreams_limit = LONG_MAX,
         .time_limit       = { .tv_sec = LONG_MAX }
     };
-    struct cgroup_ctx cgroup_ctx = {
-        .cgroupprocs_fd = -1,
-        .pidsevents_fd = -1,
-        .memoryevents_fd = -1
-    };
+    int spawnerout[2];
+    struct cgroup_ctx cgroup_ctx = { -1, -1, -1 };
 
-    // otherwize log_write() becomes non-atomic
+    // otherwize log_error() becomes non-atomic
     setvbuf(stderr, NULL, _IOLBF, 0);
 
     if (argc>1) {
@@ -61,7 +51,9 @@ int main(int argc)
     if (socketpair(AF_UNIX, SOCK_STREAM|SOCK_CLOEXEC, 0, spawnerout) == -1)
         fail(kStatusInternalError,
             "socketpair(AF_UNIX, SOCK_STREAM): %s", strerror(errno));
-    create_cgroup(&request, &cgroup_ctx);
+
+    if (request.cgroup_config) configure_cgroup(&request, &cgroup_ctx);
+
     switch ((spawner_pid = myclone(CLONE_NEWUSER|CLONE_NEWPID|CLONE_NEWNET
         |CLONE_NEWUTS|CLONE_NEWNS|CLONE_NEWIPC))) {
     case -1:
@@ -78,8 +70,7 @@ int main(int argc)
         if (setsid() == -1)
             fail(kStatusInternalError, "setsid: %s", strerror(errno));
 
-        if (cgroup_ctx.cgroupprocs_fd != -1) {
-
+        if (request.cgroup_config) {
             // join cgroup
             write_checked(cgroup_ctx.cgroupprocs_fd, "0", 1, "cgroup.procs");
         }

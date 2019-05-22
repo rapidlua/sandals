@@ -4,8 +4,6 @@
 #include <unistd.h>
 #include <limits.h>
 
-extern uid_t uid;
-extern gid_t gid;
 extern pid_t spawner_pid;
 extern int response_fd;
 
@@ -30,7 +28,7 @@ struct sandals_request {
     const char *host_name;
     const char *domain_name;
     uid_t uid;
-    gid_t gid;;
+    gid_t gid;
     const char *chroot;
     const jstr_token_t *mounts;
     const char *cgroup;
@@ -92,7 +90,7 @@ struct cgroup_ctx {
     int pidsevents_fd; // "pids.events"
 };
 
-void create_cgroup(
+void configure_cgroup(
     const struct sandals_request *request, struct cgroup_ctx *ctx);
 
 int supervisor(

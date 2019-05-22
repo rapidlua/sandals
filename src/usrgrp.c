@@ -10,6 +10,17 @@ static const char kProcSelfUidmapPath[] = "/proc/self/uid_map";
 static const char kProcSelfGidmapPath[] = "/proc/self/gid_map";
 static const char kProcSelfSetgroupsPath[] = "/proc/self/setgroups";
 
+static uid_t uid;
+static gid_t gid;
+// In map_user_and_group() uid/gid maps aren't configured yet, hence
+// getuid/getgid() return nonsensical values. Learn uid/gid beforehand.
+static void init_uid_gid() __attribute__((constructor));
+void init_uid_gid()
+{
+    uid = getuid();
+    gid = getgid();
+}
+
 void map_user_and_group(const struct sandals_request *request)
 {
     int fd;

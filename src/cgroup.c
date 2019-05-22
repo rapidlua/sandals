@@ -54,12 +54,9 @@ void cleanup_cgroup() {
     }
 }
 
-static const char *do_create_cgroup(const struct sandals_request *request)
+static const char *create_cgroup(const struct sandals_request *request)
 {
     size_t len;
-
-    // use existing cgroup
-    if (request->cgroup) return request->cgroup;
 
     if (request->cgroup_root) {
         len = strlen(request->cgroup_root);
@@ -114,7 +111,7 @@ static const char *do_create_cgroup(const struct sandals_request *request)
     return cgroup_path;
 }
 
-void create_cgroup(
+void configure_cgroup(
     const struct sandals_request *request, struct cgroup_ctx *ctx) {
 
     const char *cgroup_path;
@@ -123,9 +120,7 @@ void create_cgroup(
     int memoryevents = 0, pidevents = 0;
     char path_buf[PATH_MAX];
 
-    if (!request->cgroup_config) return;
-
-    cgroup_path = do_create_cgroup(request);
+    cgroup_path = request->cgroup ? request->cgroup : create_cgroup(request);
 
     JSOBJECT_FOREACH(request->cgroup_config, key, value) {
 
