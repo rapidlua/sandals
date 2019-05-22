@@ -334,7 +334,7 @@ check_rip_dest:
 int hook_begin()
 {
     if (g_mem_fd == -1) {
-        g_mem_fd = open("/proc/self/mem", O_WRONLY);
+        g_mem_fd = open("/proc/self/mem", O_WRONLY|O_NOCTTY|O_CLOEXEC);
     }
 
     return 0;
