@@ -3,8 +3,10 @@ OBJS+=src/mounts.o src/net.o src/pipes.o src/request.o src/response.o
 OBJS+=src/sandals.o src/spawner.o src/stdstreams.o src/supervisor.o
 OBJS+=src/usrgrp.o
 
-CFLAGS?=
+CFLAGS?=-Os -DNDEBUG
 CFLAGS+=-I.
+
+build: sandals stdstreams_helper.so
 
 sandals: ${OBJS} kafel/libkafel.a
 	${CC} ${LDFLAGS} -o sandals $^
