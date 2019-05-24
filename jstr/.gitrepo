@@ -5,8 +5,8 @@
 ;
 [subrepo]
 	remote = https://github.com/all-things-interactive/jstr.git
-	branch = v1.0
-	commit = a0a8dc5d83d2ac9da712cad5e62d2bc72ef3dac7
-	parent = 4c2bd921ca59e386e22dce6af2e70739b20add26
+	branch = v1.0.1
+	commit = 304af4611bbf92ea7bff2930f994f55b7294438e
+	parent = 97e72704def377fdb0f21f9a4c07252644257cc4
 	method = merge
 	cmdver = 0.4.0

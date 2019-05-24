@@ -314,6 +314,8 @@ int main() {
     test("fruit", JSTR_INVAL);
     test("nul", JSTR_INVAL);
     test("nullnullnull", JSTR_INVAL);
+    test("taaaaaaaaaaaaaaaaaaaaaaaaaaaaatrue", JSTR_INVAL); // bug fixed
+    test("taaaaaaaaaaaaaaaaaaaaaaaaaaaaanull", JSTR_INVAL); // bug fixed
 
     return err ? EXIT_FAILURE : EXIT_SUCCESS;
 }

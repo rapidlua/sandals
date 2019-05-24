@@ -166,11 +166,18 @@ parse_u_escape:
     }
 
 parse_true_false_or_null: {
-        unsigned v = 0;
+#define _(a,b) ((a)<<5|((b)-'a'))
+        static const unsigned kw[] = {
+            [JSTR_TRUE>>5] = _(_(_(_(31,'t'),'r'),'u'),'e'),
+            [JSTR_FALSE>>5] = _(_(_(_(_(31,'f'),'a'),'l'),'s'),'e'),
+            [JSTR_NULL>>5] = _(_(_(_(31,'n'),'u'),'l'),'l')
+        };
+        unsigned v = 31;
         do {
-            v = (v<<5)|(*p-'a');
+            v = _(v, *p);
         } while (((unsigned)*++p-'a')<='z'-'a');
-        if (v==640644 || v==5254724 || v==446827) goto commit_token;
+        if (v==kw[token_cur[-1].type__>>5]) goto commit_token;
+#undef _
         return JSTR_INVAL;
     }
 
