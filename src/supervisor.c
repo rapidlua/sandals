@@ -333,6 +333,8 @@ int supervisor(
 
     if ((timer_fd = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC)) == -1)
         fail(kStatusInternalError, "Create timer: %s", strerror(errno));
+    if (!itimerspec.it_value.tv_nsec)
+        itimerspec.it_value.tv_nsec = 1; // zero timeout disables timer
     if (timerfd_settime(timer_fd, 0, &itimerspec, NULL) == -1)
         fail(kStatusInternalError, "Set timer: %s", strerror(errno));
 
