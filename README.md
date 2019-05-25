@@ -21,7 +21,7 @@ $ echo '{"cmd":["ps","-A"],
  1. **detailed status** — Response tells whether the task exited normally or was killed
  or terminated due to compromised integrity (see below).
  1. **task integrity** — Sandbox introduces new modes of failure, e.g. disk full error due to
- to filesystem quota in effect; a subprocess terminated due to exceeded memory limit.
+ to filesystem quota in effect; e.g. a subprocess terminated due to exceeded memory limit.
  A task integrity is compromised; it is unlikely to recover and it might produce bogus
  results if not prepared to handle an unusual failure. The compromised task is terminated
  and detailed status tells the reason and gives a hint if certain limits should be increased.
@@ -29,7 +29,8 @@ $ echo '{"cmd":["ps","-A"],
  1. **as fast as possible** — Wrapping a task in `docker run`
  [reportedly](https://medium.com/travis-on-docker/the-overhead-of-docker-run-f2f06d47c9f3)
 adds 300ms overhead. Sandals reduces that to a mere 5ms, a boon for short-lived tasks!
- 1. **exposes Linux kernel features instead of inventing new abstractions** — We aren't Docker,
+ 1. **exposes Linux kernel features instead of inventing higher-level abstractions** —
+ Primarily a side effect of being fast and lean. We aren't Docker,
  the user should be sufficiently versed in namespaces, cgroups, seccomp and mounts.
  
 Other mature lightweight sandboxes are readily available:
@@ -44,18 +45,167 @@ Most notably, existing solutions require elevated privileges
 in order to set up a constrained sandbox. This is an inherent limitation
 of cgroups v1. Sandals, on the other hand, takes advantage of cgroups v2.
 
-## Isolation
+## Installation
 
-Employed Linux kernel isolation features are listed below.
-A feature is enabled unconditionally, unless the converse is explicitly stated. 
+```
+$ make && make install && make install_helper
+```
 
- * *namespaces*
-   * *user namespace*
-   * *pid namespace* — task executes in a brand-new pid namespace with `sandals` as PID 1;
-   * *net namespace* — no network, only a private loopback interface is accessible;
-   * *mount namespace*
-   * *ipc namespace*
-   * *uts namespace*
-   * *cgroup namespace* — iff `cgroupConfig` is supplied;
- * *cgroups* — iff `cgroupConfig` is supplied;
- * *seccomp* — iff `seccompPolicy` is supplied.
+## User guide
+
+(This guide is not meant to be exhaustive, check [Reference](#Reference) for further details.)
+
+Sandals runs untrusted code in a private set of *Linux namespaces*.
+Namespaces partition system objects. E.g. **IPC namespaces** partition IPC objects.
+Sandals creates the full set of private namespaces by default. Sandboxed
+code is unable to interact with host processes, either directly via signals or indirectly
+via IPC or sockets. It has no access to the network either.
+
+### Restricting access to the filesystem
+
+*TODO*
+
+### Limiting resource usage with cgroups
+
+*TODO*
+
+## Reference
+
+### Response
+
+JSON object with `status` key. Depending on the status aditional keys might be present:
+
+ * **exited**: exited normally
+   * **code**: process exit code
+ * **killed**: killed by signal
+   * **signal**: killing signal (number)
+   * **description**: signal description as produced by `strsignal`
+ * **memoryLimit**: memory limit as set by cgroup's `memory.max` exceeded
+ * **pidsLimit**: pids limit as set by cgroup's `pids.max` exceeded
+ * **timeLimit**: run time limit exceeded, see `timeLimit` in [Request](#Request) section
+ * **fileLimit**: task output is written to a file; file size limit exceeded, see `pipes` in [Request](#Request) section
+ * **requestInvalid**: request JSON invalid
+    * **description**: error description
+ * **internalError**: internal error
+    * **description**: error description
+
+### Request
+
+JSON object with the mandatory `cmd` key.
+Ex: `{"cmd":["uname","-a"]}`.
+
+Optional keys:
+
+ * **hostName**: string
+   
+   Host name as observed inside sandbox. Default: `sandals`.
+ 
+ * **domainName**: string
+ 
+   Domain name as observed inside sandbox. Default: `sandals`.
+
+ * **uid**: number
+ 
+   User id as observed inside sandbox. Default: `0`.
+ 
+ * **gid**: number
+
+   Group id as observed inside sandbox. Default: `0`.
+
+ * **chroot**: string
+ 
+   A path to use as filesystem root inside sandbox. Default: `/`.
+ 
+ * **mounts**: object []
+ 
+   A list of mounts to apply to filesystem view inside sandbox. Default: `[]`.
+   
+   Every mount has the mandatory `type` key. Type is either `bind`
+   for a bind mount or a value recognized by `mount` system call,
+   like `tmpfs` or `proc`.
+   
+   The mandatory `dest` key tells the destination of the mount.
+   Chroot prefix (if any) is automatically prepended to the given path.
+  
+   Bind mounts must specify the source path with `src` key.
+   
+   Optional `options` string (empty by default) is passed to `mount` syscall verbatim.
+   
+   Optional `ro` boolean key (default: `false`) turns on read-only mode for the mount.
+  
+ * **cgroupConfig**: object
+ 
+   Enable resource limiting with cgroups. Default: cgroups not used. 
+ 
+   Ex: `{"memory.max": "1000000", "memory.swap.max": "1000000"}`.
+   For each key/value pair, the `value` is written to the file named by `key` in the cgroup directory.
+   
+ * **cgroup**, **cgroupRoot**: string
+ 
+   If `cgroupConfig` is present, sandboxed task is put into a separate cgroup.
+   This is either an existing cgroup as specified by `cgroup` key or
+   a new one if the later key is absent.
+   
+   A new cgroup is created under `cgroupRoot` if present, otherwize a new
+   cgroup is spawned as a sibling of the current cgroup.
+   
+   If a new cgroup was created it is removed when sandals exits.
+ 
+ * **seccompPolicy**: string
+ 
+   A syscall filtering policy in Kafel syntax. Filtering disabled by default.
+ 
+ * **vaRandomize**: boolean
+  
+   ASLR, enabled by default.
+ 
+ * **env**: string []
+ 
+   Task's environment as a list of `KEY=VALUE` strings. Empty by default.
+ 
+ * **workDir**: string
+ 
+   Task's working directory. Default: `/`.
+   
+   Chroot prefix (if any) is automatically prepended to the given path.
+ 
+ * **timeLimit**: number
+ 
+   A time limit in seconds. No limit by default.
+ 
+ * **pipes**: object []
+ 
+   A list of unidirectional channels for streaming data out of the sandbox.
+   
+   Mandatory `file` key  names the destination file to write the data.
+   
+   At least one of `stdout`, `stderr` or `fifo` keys must be present.
+   If `stdout` key is set to `true` the pipe is attached as a task's standard output.
+   Set `stderr` to `true` to attach the standard error stream.
+   The last option is to expose the pipe ingress as a fifo in the filesystem.
+   Chroot prefix (if any) is automatically prepended to the path in `fifo` key.
+   
+   Optional `limit` numeric key caps the maximum amount of collected data (no limit by default).
+   If the limit is exeeded, the task terminates with `status:fileLimit`.
+ 
+ * **stdStreams**: object
+ 
+   Subkeys (same meaning as in pipe object, see `pipes`):
+   
+   * **file**
+   
+   * **limit**
+ 
+   Capture both stdout and stderr simultaneously.
+   Use case: present task's output *exactly* as it would appear if invoked in a terminal.
+   Style stderr content differently (eg: red color).
+   
+   Every chunk of data is prefixed with 32-bit integer in the network byte order.
+   Bits 0..30 encode the chunk length. Bit 31 tells whether the chunk origin is stdout (0) or stderr (1).
+   
+   **Note:** when the destination is a terminal standard streams in C library use less buffering.
+   A task should preload `/lib/sandals/stdstreams_helper.so` to get the same result. This must be
+   arranged manually, either use `LD_PRELOAD`+`env` or `/etc/ld.so.preload`+`mounts`.
+   Run `make install_helper` to install `stdstreams_helper.so`.
+
+   **Note:** if size limit is exceeded the last packet (header + chunk) might be cut short.
