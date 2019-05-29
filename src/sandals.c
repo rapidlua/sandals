@@ -61,7 +61,7 @@ int main(int argc)
     case 0:
         response_fd = spawnerout[1];
 
-        // get killed if parent dies
+        // get killed if parent dies - no signal if already dead by now
         if (prctl(PR_SET_PDEATHSIG, SIGKILL, 0, 0, 0) == -1)
             fail(kStatusInternalError,
                 "prctl(PR_SET_PDEATHSIG): %s", strerror(errno));

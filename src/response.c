@@ -47,7 +47,7 @@ void response_append_int(struct sandals_response *response, int value) {
 
 void response_send(const struct sandals_response *response) {
     const char *p, *e;
-    size_t rc;
+    ssize_t rc;
 
     if (response->size > sizeof response->buf)
         fail(kStatusResponseTooBig, NULL);
