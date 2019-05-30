@@ -7,6 +7,8 @@ CFLAGS?=-Os -DNDEBUG
 CFLAGS+=-I.
 
 build: sandals stdstreams_helper.so
+test: build
+	nodejs tests/run.js
 
 sandals: ${OBJS} kafel/libkafel.a
 	${CC} ${LDFLAGS} -o sandals $^
@@ -18,9 +20,6 @@ clean:
 	rm -fv sandbal ${OBJS} 
 	rm -fv stdstreams_helper.so ${STDSTREAMS_HELPER_OBJS} musl.flags
 	make -C kafel clean
-
-run: sandals
-	./run.sh
 
 kafel/libkafel.a:
 	make -C kafel
