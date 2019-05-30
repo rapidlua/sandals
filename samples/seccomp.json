@@ -1,4 +1,0 @@
-{
-    "cmd":["id"],
-    "seccompPolicy": "ALLOW{execve}DEFAULT DENY"
-}

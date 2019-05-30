@@ -1,4 +1,0 @@
-{
-    "cmd": [ "id" ],
-    "cgroupConfig": { "pids.max": "0" }
-}
