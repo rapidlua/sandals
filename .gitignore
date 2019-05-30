@@ -1,0 +1,7 @@
+*.o
+sandals
+*.so
+musl.flags
+*.swp
+*.swo
+node_modules
