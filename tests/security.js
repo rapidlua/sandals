@@ -2,10 +2,30 @@ const assert = require('assert');
 const { spawnSync } = require('child_process');
 const {
     SANDALS,
-    test,
+    test, testAtExit,
     requestInvalid, exited, killed, internalError, timeLimit,
     TmpFile
 } = require('./harness');
+
+// Ensure env variables do NOT leak
+test('env-leak', ()=>{
+    const output = new TmpFile();
+    const response = spawnSync(
+        SANDALS, [], {
+            input: JSON.stringify({
+                cmd: ['sh', '-c', 'echo XXXXXX${SECRET}'],
+                pipes: [{file: output, stdout: true}]
+            }),
+            encoding: 'utf8', env: {SECRET: 42}
+        }
+    ).stdout;
+    const responseJSON = JSON.parse(response);
+    if (responseJSON.status !== 'exited' || responseJSON.code !== 0)
+        assert.fail(response);
+    // We get XXXXXX marker, hence output redirection is working, yet
+    // SECRET doesn't come through
+    assert.equal(output.read(), 'XXXXXX\n');
+});
 
 // Ensure fd-s do not leak
 test('fd-leak', ()=>{
@@ -55,4 +75,27 @@ test('net-interfaces', ()=>{
         pipes: [{file: output, stdout: true}]
     }, 0);
     assert.equal(output.read(), 'Iface\nlo\n');
+});
+
+// Ensure sandbox gets private 'lo', which is NOT shared with the host.
+'see tests/socket.js';
+'not part of the test suite due to a diffetent programming style';
+
+// Ensure ipc is properly isolated:
+//   create shared memory with ipcmk,
+//   ensure it's listed by ipcs,
+//   ensure it's NOT listed by sandboxed ipcs.
+test('ipc-isolation', ()=>{
+    const id = spawnSync('ipcmk', ['-M', '1'], {encoding: 'utf8'}
+    ).stdout.match(/:\s+(\d+)\s*$/)[1];
+    assert(id == +id);
+    testAtExit(()=>spawnSync('ipcrm', ['-m', id]));
+    const idMatcher = new RegExp('\\s'+id+'\\s');
+    const normal = spawnSync('ipcs', ['-m'], {encoding: 'utf8'}).stdout;
+    if (!normal.match(idMatcher)) assert.fail(normal);
+    const sandboxed = new TmpFile();
+    exited({cmd: ['ipcs', '-m'], pipes: [{file: sandboxed, stdout: true}]});
+    const sandboxedData = sandboxed.read();
+    if (!sandboxedData || sandboxedData.match(idMatcher))
+        assert.fail(sandboxedData);
 });

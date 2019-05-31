@@ -9,6 +9,7 @@ CFLAGS+=-I.
 build: sandals stdstreams_helper.so
 test: build
 	nodejs tests/run.js
+	nodejs tests/socket.js
 
 sandals: ${OBJS} kafel/libkafel.a
 	${CC} ${LDFLAGS} -o sandals $^

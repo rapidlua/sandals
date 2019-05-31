@@ -17,5 +17,5 @@ require('./mounts');
 require('./security');
 
 const { testsTotal, testsSucceeded } = require('./harness').getInfo();
-console.log(`${testsTotal}/${testsSucceeded}`);
+console.log(`${testsSucceeded}/${testsTotal}`);
 process.exit(testsTotal && testsTotal === testsSucceeded ? 0 : 1);
