@@ -15,8 +15,8 @@ test('basic', ()=>{
     exited({cmd:['true']}, 0);
     exited({cmd:['false']}, 1);
     exited({cmd:['sh', '-c', 'exit 42']}, 42);
-    killed({cmd:['kill', '0']}, 15);
-    killed({cmd:['kill', '-9', '0']}, 9);
+    killed({cmd:['kill', '0']}, 'SIGTERM');
+    killed({cmd:['kill', '-9', '0']}, 'SIGKILL');
     timeLimit({cmd:['sleep', '1'], timeLimit:0});
     timeLimit({cmd:['sleep', '1'], timeLimit:0.1});
 });

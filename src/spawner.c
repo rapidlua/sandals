@@ -19,6 +19,41 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+static const char signals[][10] = {
+    [SIGABRT] = "SIGABRT",
+    [SIGALRM] = "SIGALRM",
+    [SIGBUS] = "SIGBUS",
+    [SIGCHLD] = "SIGCHLD",
+    [SIGCONT] = "SIGCONT",
+    [SIGFPE] = "SIGFPE",
+    [SIGHUP] = "SIGHUP",
+    [SIGILL] = "SIGILL",
+    [SIGINT] = "SIGINT",
+    [SIGIO] = "SIGIO",
+    [SIGKILL] = "SIGKILL",
+    [SIGPIPE] = "SIGPIPE",
+    [SIGPOLL] = "SIGPOLL",
+    [SIGPROF] = "SIGPROF",
+    [SIGPWR] = "SIGPWR",
+    [SIGQUIT] = "SIGQUIT",
+    [SIGSEGV] = "SIGSEGV",
+    [SIGSTKFLT] = "SIGSTKFLT",
+    [SIGSTOP] = "SIGSTOP",
+    [SIGSYS] = "SIGSYS",
+    [SIGTERM] = "SIGTERM",
+    [SIGTRAP] = "SIGTRAP",
+    [SIGTSTP] = "SIGTSTP",
+    [SIGTTIN] = "SIGTTIN",
+    [SIGTTOU] = "SIGTTOU",
+    [SIGURG] = "SIGURG",
+    [SIGUSR1] = "SIGUSR1",
+    [SIGUSR2] = "SIGUSR2",
+    [SIGVTALRM] = "SIGVTALRM",
+    [SIGWINCH] = "SIGWINCH",
+    [SIGXCPU] = "SIGXCPU",
+    [SIGXFSZ] = "SIGXFSZ"
+};
+
 static int childstdout_fd;
 static int childstderr_fd;
 
@@ -221,11 +256,16 @@ int spawner(const struct sandals_request *request) {
         response_append_int(&response, WEXITSTATUS(status));
         response_append_raw(&response, "}\n");
     } else {
+        int sig = WTERMSIG(status);
         response_append_esc(&response, kStatusKilled);
-        response_append_raw(&response, "\",\"signal\":");
-        response_append_int(&response, WTERMSIG(status));
-        response_append_raw(&response, ",\"description\":\"");
-        response_append_esc(&response, strsignal(WTERMSIG(status)));
+        response_append_raw(&response, "\",\"signal\":\"");
+        if (sig > 0 && (unsigned)sig <= sizeof(signals)/sizeof(signals[0])
+            && signals[sig]
+        ) {
+            response_append_raw(&response, signals[sig]);
+        } else {
+            response_append_int(&response, sig);
+        }
         response_append_raw(&response, "\"}\n");
     }
     response_send(&response);

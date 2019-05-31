@@ -78,8 +78,7 @@ JSON object with `status` key. Depending on the status aditional keys might be p
  * **exited**: exited normally
    * **code**: process exit code
  * **killed**: killed by signal
-   * **signal**: killing signal (number)
-   * **description**: signal description as produced by `strsignal`
+   * **signal**: killing signal (string, e.g. `SIGTERM`)
  * **memoryLimit**: memory limit as set by cgroup's `memory.max` exceeded
  * **pidsLimit**: pids limit as set by cgroup's `pids.max` exceeded
  * **timeLimit**: run time limit exceeded, see `timeLimit` in [Request](#Request) section
