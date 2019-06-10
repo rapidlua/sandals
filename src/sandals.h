@@ -74,8 +74,8 @@ void map_user_and_group(const struct sandals_request *request);
 struct sandals_pipe {
     const char *file;
     const char *fifo;
-    bool stdout;
-    bool stderr;
+    bool as_stdout;
+    bool as_stderr;
     long limit;
 };
 

@@ -30,7 +30,7 @@ static void sink_init(
 
     sink[index].pipe = *pipe;
     if (!pipe->fifo)
-        sink[index].pipe.fifo = pipe->stdout ? "@stdout" : "@stderr";
+        sink[index].pipe.fifo = pipe->as_stdout ? "@stdout" : "@stderr";
     sink[index].splice = 1;
     sink[index].limit = pipe->limit;
     sink[index].fd = open_checked(

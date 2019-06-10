@@ -37,12 +37,12 @@ void pipe_foreach(
             }
 
             if (!strcmp(key, "stdout")) {
-                pipe.stdout = jsget_bool(request->json_root, value);
+                pipe.as_stdout = jsget_bool(request->json_root, value);
                 continue;
             }
 
             if (!strcmp(key, "stderr")) {
-                pipe.stderr = jsget_bool(request->json_root, value);
+                pipe.as_stderr = jsget_bool(request->json_root, value);
                 continue;
             }
 
@@ -58,7 +58,7 @@ void pipe_foreach(
         if (!pipe.file)
             jserror(request->json_root, pipedef, "'file' missing");
 
-        if (!pipe.stdout && !pipe.stderr && !pipe.fifo)
+        if (!pipe.as_stdout && !pipe.as_stderr && !pipe.fifo)
             jserror(request->json_root, pipedef,
                 "'stdout' or 'stderr' or 'fifo' is required");
 

@@ -68,7 +68,7 @@ static void make_pipe(
                 "Creating fifo '%s': %s", pipe->fifo, strerror(errno));
         pipe_fd[0] = open_checked(
             pipe->fifo, O_RDONLY|O_NOCTTY|O_CLOEXEC|O_NONBLOCK, 0);
-        if (pipe->stdout || pipe->stderr)
+        if (pipe->as_stdout || pipe->as_stderr)
             pipe_fd[1] = open_checked(
                 pipe->fifo, O_WRONLY|O_NOCTTY|O_CLOEXEC, 0);
     } else {
@@ -79,8 +79,8 @@ static void make_pipe(
                 strerror(errno));
     }
 
-    if (pipe->stdout) childstdout_fd = pipe_fd[1];
-    if (pipe->stderr) childstderr_fd = pipe_fd[1];
+    if (pipe->as_stdout) childstdout_fd = pipe_fd[1];
+    if (pipe->as_stderr) childstderr_fd = pipe_fd[1];
     fd[index] = pipe_fd[0];
 }
 
