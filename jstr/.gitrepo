@@ -4,7 +4,7 @@
 ; git-subrepo command. See https://github.com/git-commands/git-subrepo#readme
 ;
 [subrepo]
-	remote = https://github.com/all-things-interactive/jstr.git
+	remote = https://github.com/rapidlua/jstr.git
 	branch = v1.0.1
 	commit = 304af4611bbf92ea7bff2930f994f55b7294438e
 	parent = 97e72704def377fdb0f21f9a4c07252644257cc4

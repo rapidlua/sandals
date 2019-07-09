@@ -4,7 +4,7 @@
 ; git-subrepo command. See https://github.com/git-commands/git-subrepo#readme
 ;
 [subrepo]
-	remote = https://github.com/all-things-interactive/hook-engine.git
+	remote = https://github.com/rapidlua/hook-engine.git
 	branch = v1.0.1
 	commit = a2f860dd360e2bc7526e71f3da2e3caafe8a65f6
 	parent = 8a1cbb94df46a328afab9e8184e489055cc3d764
