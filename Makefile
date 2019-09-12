@@ -8,6 +8,7 @@ CFLAGS+=-I.
 
 build: sandals stdstreams_helper.so
 test: build
+	test "$$(whoami)" != root
 	nodejs tests/run.js
 	nodejs tests/socket.js
 
