@@ -14,7 +14,7 @@ test('env-leak', ()=>{
         SANDALS, [], {
             input: JSON.stringify({
                 cmd: ['sh', '-c', 'echo XXXXXX${SECRET}'],
-                pipes: [{file: output, stdout: true}]
+                pipes: [{dest: output, stdout: true}]
             }),
             encoding: 'utf8', env: {SECRET: 42}
         }
@@ -38,7 +38,7 @@ test('fd-leak', ()=>{
             input: JSON.stringify({
                 cmd: ['readlink', '-v', '/proc/self/fd/26'],
                 // v v v proves that sandals inherited fd #26
-                pipes: [{file: '/proc/self/fd/26', stdout: true, stderr: true}]
+                pipes: [{dest: '/proc/self/fd/26', stdout: true, stderr: true}]
             }),
             encoding: 'utf8', stdio
         }
@@ -62,7 +62,7 @@ test('dumpable', ()=>{
             ].join(';')
         ],
         mounts: [{type: 'proc', dest: '/proc'}],
-        pipes: [{file: output, stdout: true}]
+        pipes: [{dest: output, stdout: true}]
     });
     assert.equal(output.read(), 'sandals\n');
 });
@@ -72,7 +72,7 @@ test('net-interfaces', ()=>{
     const output = new TmpFile();
     exited({
         cmd: ['sh', '-c', "ifconfig -a -s | awk '{ print $1 }'"],
-        pipes: [{file: output, stdout: true}]
+        pipes: [{dest: output, stdout: true}]
     }, 0);
     assert.equal(output.read(), 'Iface\nlo\n');
 });
@@ -94,7 +94,7 @@ test('ipc-isolation', ()=>{
     const normal = spawnSync('ipcs', ['-m'], {encoding: 'utf8'}).stdout;
     if (!normal.match(idMatcher)) assert.fail(normal);
     const sandboxed = new TmpFile();
-    exited({cmd: ['ipcs', '-m'], pipes: [{file: sandboxed, stdout: true}]});
+    exited({cmd: ['ipcs', '-m'], pipes: [{dest: sandboxed, stdout: true}]});
     const sandboxedData = sandboxed.read();
     if (!sandboxedData || sandboxedData.match(idMatcher))
         assert.fail(sandboxedData);

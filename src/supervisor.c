@@ -29,12 +29,12 @@ static void sink_init(
     struct sandals_sink *sink) {
 
     sink[index].pipe = *pipe;
-    if (!pipe->fifo)
-        sink[index].pipe.fifo = pipe->as_stdout ? "@stdout" : "@stderr";
+    if (!pipe->src)
+        sink[index].pipe.src = pipe->as_stdout ? "@stdout" : "@stderr";
     sink[index].splice = 1;
     sink[index].limit = pipe->limit;
     sink[index].fd = open_checked(
-        pipe->file, O_CLOEXEC|O_WRONLY|O_TRUNC|O_CREAT|O_NOCTTY, 0600);
+        pipe->dest, O_CLOEXEC|O_WRONLY|O_TRUNC|O_CREAT|O_NOCTTY, 0600);
     // We depend on fd being in blocking IO mode. This is guaranteed
     // since we are explicitly requesting this mode via open() flags
     // (even when opening /proc/self/fd/*).
@@ -163,7 +163,7 @@ static int do_spawnerout(struct sandals_supervisor *s) {
         && cmsghdr->cmsg_level == SOL_SOCKET
         && cmsghdr->cmsg_type == SCM_RIGHTS
         && cmsghdr->cmsg_len == CMSG_LEN(sizeof(int)
-            *(s->npipe + (s->request->stdstreams_file!=NULL)))
+            *(s->npipe + (s->request->stdstreams_dest!=NULL)))
     ) {
         // Unpack PIPE0 ... PIPEn, STDSTREAMSSOCKET?
         // (transmitted in this order).
@@ -174,7 +174,7 @@ static int do_spawnerout(struct sandals_supervisor *s) {
             s->pollfd[PIPE0_INDEX+i].revents = 0;
         };
         s->npollfd = PIPE0_INDEX+s->npipe;
-        if (s->request->stdstreams_file) {
+        if (s->request->stdstreams_dest) {
             s->pollfd[STDSTREAMS_INDEX].fd = fd[s->npipe];
         }
         return 0;
@@ -245,7 +245,7 @@ static int do_pipes(struct sandals_supervisor *s) {
                 if (errno==EAGAIN) continue;
                 fail(kStatusInternalError,
                     "Splicing '%s' and '%s': %s",
-                    sink->pipe.fifo, sink->pipe.file, strerror(errno));
+                    sink->pipe.src, sink->pipe.dest, strerror(errno));
             }
         } else {
             char buf[PIPE_BUF];
@@ -260,7 +260,7 @@ static int do_pipes(struct sandals_supervisor *s) {
             if (rc == -1) {
                 if (errno==EAGAIN || errno==EWOULDBLOCK) continue;
                 fail(kStatusInternalError,
-                    "Reading '%s': %s", sink->pipe.fifo, strerror(errno));
+                    "Reading '%s': %s", sink->pipe.src, strerror(errno));
             }
             e = p+(rc > sink->limit ? sink->limit : rc);
             while (p != e) {
@@ -268,7 +268,7 @@ static int do_pipes(struct sandals_supervisor *s) {
                 if (sizewr==-1) {
                     if (errno==EINTR) continue;
                     fail(kStatusInternalError,
-                        "Writing '%s': %s", sink->pipe.file, strerror(errno));
+                        "Writing '%s': %s", sink->pipe.dest, strerror(errno));
                 }
                 p += sizewr;
             }
@@ -321,11 +321,11 @@ int supervisor(
     // reopened (but pipes can!)
     pipe_foreach(request, sink_init, s.sink+1);
 
-    if (request->stdstreams_file) {
+    if (request->stdstreams_dest) {
         struct sandals_pipe pipe = {
-            .file = request->stdstreams_file,
+            .dest = request->stdstreams_dest,
             .limit = request->stdstreams_limit,
-            .fifo = "@stdstreams"
+            .src = "@stdstreams"
         };
         sink_init(0, &pipe, s.sink);
         s.sink[0].splice = 0;

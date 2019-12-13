@@ -6,7 +6,7 @@ const { test, requestInvalid, exited, TmpFile } = require('./harness');
 // * mounts work with chroot;
 // * new filesystem root hosts a distinct set of directories;
 // * not possible to escape the jail with tricks like cd ../..;
-// * pipe[*].fifo isn't confused by chroot.
+// * pipe[*].src isn't confused by chroot.
 //
 test('chroot', ()=>{
     const output = new TmpFile();
@@ -30,8 +30,8 @@ test('chroot', ()=>{
         chroot: '/tmp',
         mounts,
         pipes: [
-            {file: output, stdout: true, stderr: true},
-            {file: canary, fifo: '/tmp/@canary'}
+            {dest: output, stdout: true, stderr: true},
+            {dest: canary, src: '/tmp/@canary'}
         ]
     });
     assert.deepEqual(

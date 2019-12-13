@@ -12,7 +12,7 @@ test('domainName', ()=>{
     const output = new TmpFile();
     exited({
         cmd: ['domainname'],
-        pipes: [{file: output, stdout: true}]
+        pipes: [{dest: output, stdout: true}]
     }, 0);
     assert.equal(output.read(), 'sandals\n');
 });
@@ -22,7 +22,7 @@ test('domainName-custom', ()=>{
     exited({
         cmd: ['domainname'],
         domainName: 'xanadu',
-        pipes: [{file: output, stdout: true}]
+        pipes: [{dest: output, stdout: true}]
     }, 0);
     assert.equal(output.read(), 'xanadu\n');
 });

@@ -128,8 +128,8 @@ void request_parse(struct sandals_request *request, const jstr_token_t *root) {
 
     if (stdstreams) {
         JSOBJECT_FOREACH(stdstreams, key, value) {
-            if (!strcmp(key, "file")) {
-                request->stdstreams_file = jsget_str(root, value);
+            if (!strcmp(key, "dest")) {
+                request->stdstreams_dest = jsget_str(root, value);
                 continue;
             }
             if (!strcmp(key, "limit")) {
@@ -141,8 +141,8 @@ void request_parse(struct sandals_request *request, const jstr_token_t *root) {
             jsunknown(root, value);
         }
 
-        if (!request->stdstreams_file)
-            jserror(root, stdstreams, "'file' missing");
+        if (!request->stdstreams_dest)
+            jserror(root, stdstreams, "'dest' missing");
     }
 
     if (!request->cmd || !request->cmd[0])

@@ -13,7 +13,7 @@ test('gid', ()=>{
     const output = new TmpFile();
     exited({
         cmd: ['id', '-g'],
-        pipes: [{file: output, stdout: true}]
+        pipes: [{dest: output, stdout: true}]
     }, 0);
     assert.equal(output.read(), '0\n');
 });
@@ -23,7 +23,7 @@ test('gid-custom', ()=>{
     exited({
         cmd: ['sh', '-c', 'id -u; id -g'],
         gid: 99,
-        pipes: [{file: output, stdout: true}]
+        pipes: [{dest: output, stdout: true}]
     }, 0);
     assert.equal(output.read(), '0\n99\n');
 });

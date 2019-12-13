@@ -26,13 +26,13 @@ void pipe_foreach(
         jsget_object(request->json_root, pipedef);
         JSOBJECT_FOREACH(pipedef, key, value) {
 
-            if (!strcmp(key, "file")) {
-                pipe.file = jsget_str(request->json_root, value);
+            if (!strcmp(key, "dest")) {
+                pipe.dest = jsget_str(request->json_root, value);
                 continue;
             }
 
-            if (!strcmp(key, "fifo")) {
-                pipe.fifo = jsget_str(request->json_root, value);
+            if (!strcmp(key, "src")) {
+                pipe.src = jsget_str(request->json_root, value);
                 continue;
             }
 
@@ -55,12 +55,12 @@ void pipe_foreach(
             jsunknown(request->json_root, value);
         }
 
-        if (!pipe.file)
-            jserror(request->json_root, pipedef, "'file' missing");
+        if (!pipe.dest)
+            jserror(request->json_root, pipedef, "'dest' missing");
 
-        if (!pipe.as_stdout && !pipe.as_stderr && !pipe.fifo)
+        if (!pipe.as_stdout && !pipe.as_stderr && !pipe.src)
             jserror(request->json_root, pipedef,
-                "'stdout' or 'stderr' or 'fifo' is required");
+                "'stdout' or 'stderr' or 'src' is required");
 
         fn(index++, &pipe, userdata);
     }

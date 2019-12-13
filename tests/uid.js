@@ -13,7 +13,7 @@ test('uid', ()=>{
     const output = new TmpFile();
     exited({
         cmd: ['id', '-u'],
-        pipes: [{file: output, stdout: true}]
+        pipes: [{dest: output, stdout: true}]
     }, 0);
     assert.equal(output.read(), '0\n');
 });
@@ -23,7 +23,7 @@ test('uid-custom', ()=>{
     exited({
         cmd: ['sh', '-c', 'id -u; id -g'],
         uid: 99,
-        pipes: [{file: output, stdout: true}]
+        pipes: [{dest: output, stdout: true}]
     }, 0);
     assert.equal(output.read(), '99\n0\n');
 });

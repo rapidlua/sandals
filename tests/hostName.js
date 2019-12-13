@@ -12,7 +12,7 @@ test('hostName', ()=>{
     const output = new TmpFile();
     exited({
         cmd: ['hostname'],
-        pipes: [{file: output, stdout: true}]
+        pipes: [{dest: output, stdout: true}]
     }, 0);
     assert.equal(output.read(), 'sandals\n');
 });
@@ -22,7 +22,7 @@ test('hostName-custom', ()=>{
     exited({
         cmd: ['hostname'],
         hostName: 'xanadu',
-        pipes: [{file: output, stdout: true}]
+        pipes: [{dest: output, stdout: true}]
     }, 0);
     assert.equal(output.read(), 'xanadu\n');
 });

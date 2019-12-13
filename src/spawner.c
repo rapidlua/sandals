@@ -62,15 +62,15 @@ static void make_pipe(
 
     int pipe_fd[2];
 
-    if (pipe->fifo) {
-        if (mkfifo(pipe->fifo, 0600) == -1)
+    if (pipe->src) {
+        if (mkfifo(pipe->src, 0600) == -1)
             fail(kStatusInternalError,
-                "Creating fifo '%s': %s", pipe->fifo, strerror(errno));
+                "Creating fifo '%s': %s", pipe->src, strerror(errno));
         pipe_fd[0] = open_checked(
-            pipe->fifo, O_RDONLY|O_NOCTTY|O_CLOEXEC|O_NONBLOCK, 0);
+            pipe->src, O_RDONLY|O_NOCTTY|O_CLOEXEC|O_NONBLOCK, 0);
         if (pipe->as_stdout || pipe->as_stderr)
             pipe_fd[1] = open_checked(
-                pipe->fifo, O_WRONLY|O_NOCTTY|O_CLOEXEC, 0);
+                pipe->src, O_WRONLY|O_NOCTTY|O_CLOEXEC, 0);
     } else {
         if (pipe2(pipe_fd, O_CLOEXEC) == -1)
             fail(kStatusInternalError, "pipe2: %s", strerror(errno));
@@ -114,7 +114,7 @@ static void create_pipes(
     struct cmsghdr *cmsghdr;
 
     npipes = pipe_count(request);
-    sizefds = sizeof(int)*(npipes + (request->stdstreams_file!=NULL));
+    sizefds = sizeof(int)*(npipes + (request->stdstreams_dest!=NULL));
 
     if (!sizefds) return;
 
@@ -129,7 +129,7 @@ static void create_pipes(
 
     pipe_foreach(request, make_pipe, (int*)CMSG_DATA(cmsghdr));
 
-    if (request->stdstreams_file) {
+    if (request->stdstreams_dest) {
         ((int*)CMSG_DATA(cmsghdr))[npipes] =
             make_socket(kStdStreamsAddr, sizeof(kStdStreamsAddr));
 

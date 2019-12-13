@@ -40,7 +40,7 @@ struct sandals_request {
     const char **env;
     const char *work_dir;
     struct timespec time_limit;
-    const char *stdstreams_file;
+    const char *stdstreams_dest;
     long stdstreams_limit;
     const jstr_token_t *pipes;
 
@@ -72,8 +72,8 @@ void do_mounts(const struct sandals_request *request);
 void map_user_and_group(const struct sandals_request *request);
 
 struct sandals_pipe {
-    const char *file;
-    const char *fifo;
+    const char *dest;
+    const char *src;
     bool as_stdout;
     bool as_stderr;
     long limit;

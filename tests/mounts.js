@@ -9,7 +9,7 @@ test('mounts-tmpfs', ()=>{
     exited({
         cmd: ['ls', '/proc'],
         mounts: [{type: 'tmpfs', dest: '/proc'}],
-        pipes: [{file: output, stdout: true}]
+        pipes: [{dest: output, stdout: true}]
     }, 0);
     assert.equal(output.read(), '');
 });
@@ -20,7 +20,7 @@ test('mounts-proc', ()=>{
     exited({
         cmd: ['ps', '-A', '-o', 'pid=', '-o', 'comm='],
         mounts: [{type: 'proc', dest: '/proc'}],
-        pipes: [{file: output, stdout: true}]
+        pipes: [{dest: output, stdout: true}]
     }, 0);
     assert.deepEqual(
         output.read().split(/\s+/).filter(item=>item),
@@ -38,7 +38,7 @@ test('mounts-bind', ()=>{
             {type: 'tmpfs', dest: '/proc'},
             {type: 'bind', dest: '/proc/data', src: data}
         ],
-        pipes: [{file: output, stdout: true}]
+        pipes: [{dest: output, stdout: true}]
     }, 0);
     assert.equal(data.read(), 'XXXXXX');
     assert.equal(output.read(), '0123456789abcdef');
@@ -63,7 +63,7 @@ test('mounts-bind-ro', ()=>{
             {type: 'tmpfs', dest: '/proc'},
             {type: 'bind', dest: '/proc/data', src: data, ro: true}
         ],
-        pipes: [{file: output, stdout: true}]
+        pipes: [{dest: output, stdout: true}]
     });
     assert.equal(data.read(), '0123456789abcdef');
     assert.equal(output.read(), '0123456789abcdef');

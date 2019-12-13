@@ -176,13 +176,13 @@ Optional keys:
  
    A list of unidirectional channels for streaming data out of the sandbox.
    
-   Mandatory `file` key  names the destination file to write the data.
+   Mandatory `dest` key  names the destination file to write the data.
    
-   At least one of `stdout`, `stderr` or `fifo` keys must be present.
+   At least one of `stdout`, `stderr` or `src` keys must be present.
    If `stdout` key is set to `true` the pipe is attached as a task's standard output.
    Set `stderr` to `true` to attach the standard error stream.
    The last option is to expose the pipe ingress as a fifo in the filesystem.
-   Chroot prefix (if any) is automatically prepended to the path in `fifo` key.
+   Chroot prefix (if any) is automatically prepended to the path in `src` key.
    
    Optional `limit` numeric key caps the maximum amount of collected data (no limit by default).
    If the limit is exeeded, the task terminates with `status:fileLimit`.
@@ -191,7 +191,7 @@ Optional keys:
  
    Subkeys (same meaning as in pipe object, see `pipes`):
    
-   * **file**
+   * **dest**
    
    * **limit**
  
