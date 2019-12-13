@@ -43,6 +43,7 @@ struct sandals_request {
     const char *stdstreams_dest;
     long stdstreams_limit;
     const jstr_token_t *pipes;
+    const jstr_token_t *copy_files;
 
     /* for computing paths in error reporting */
     const jstr_token_t *json_root;
@@ -79,7 +80,7 @@ struct sandals_pipe {
     long limit;
 };
 
-int pipe_count(const struct sandals_request *request);
+int pipe_count(const struct sandals_request *request, int *);
 
 void pipe_foreach(
     const struct sandals_request *request, void(*fn)(), void *userdata);

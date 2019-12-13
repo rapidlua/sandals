@@ -60,6 +60,7 @@ struct sandals_supervisor {
     int exiting;
     const struct sandals_request *request;
     int npipe;
+    int nrealpipe;
     int npollfd;
     struct sandals_sink *sink;
     struct pollfd *pollfd;
@@ -173,7 +174,7 @@ static int do_spawnerout(struct sandals_supervisor *s) {
             s->pollfd[PIPE0_INDEX+i].events = POLLIN;
             s->pollfd[PIPE0_INDEX+i].revents = 0;
         };
-        s->npollfd = PIPE0_INDEX+s->npipe;
+        s->npollfd = PIPE0_INDEX+s->nrealpipe;
         if (s->request->stdstreams_dest) {
             s->pollfd[STDSTREAMS_INDEX].fd = fd[s->npipe];
         }
@@ -304,7 +305,7 @@ int supervisor(
 
     s.exiting = 0;
     s.request = request;
-    s.npipe = pipe_count(request);
+    s.npipe = pipe_count(request, &s.nrealpipe);
     s.npollfd = PIPE0_INDEX;
     if (!(s.sink = malloc(sizeof(struct sandals_sink)*(1+s.npipe)
         +sizeof(struct pollfd)*(PIPE0_INDEX+s.npipe)
@@ -379,7 +380,10 @@ int supervisor(
     }
 
     kill(spawner_pid, SIGKILL); spawner_pid = -1;
-    s.exiting = 1; do_pipes(&s);
+    s.exiting = 1;
+    if (s.npipe && s.pollfd[PIPE0_INDEX].fd) /* did receive fds */
+        s.npollfd = PIPE0_INDEX+s.npipe;
+    do_pipes(&s);
     response_send(&s.response);
     return EXIT_SUCCESS;
 }

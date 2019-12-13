@@ -123,6 +123,11 @@ void request_parse(struct sandals_request *request, const jstr_token_t *root) {
             continue;
         }
 
+        if (!strcmp(key, "copyFiles")) {
+            request->copy_files = jsget_array(root, value);
+            continue;
+        }
+
         jsunknown(root, value);
     }
 

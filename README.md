@@ -186,7 +186,13 @@ Optional keys:
    
    Optional `limit` numeric key caps the maximum amount of collected data (no limit by default).
    If the limit is exeeded, the task terminates with `status:fileLimit`.
- 
+
+ * **copyFiles**: object []
+
+   A list of files to copy out of the sandbox once it terminates.
+
+   Subkeys are the same as in pipe object, see `pipes`.
+
  * **stdStreams**: object
  
    Subkeys (same meaning as in pipe object, see `pipes`):

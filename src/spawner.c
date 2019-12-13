@@ -56,6 +56,7 @@ static const char signals[][10] = {
 
 static int childstdout_fd;
 static int childstderr_fd;
+static int nrealpipe;
 
 static void make_pipe(
     int index, const struct sandals_pipe *pipe, int fd[]) {
@@ -63,11 +64,16 @@ static void make_pipe(
     int pipe_fd[2];
 
     if (pipe->src) {
-        if (mkfifo(pipe->src, 0600) == -1)
-            fail(kStatusInternalError,
-                "Creating fifo '%s': %s", pipe->src, strerror(errno));
-        pipe_fd[0] = open_checked(
-            pipe->src, O_RDONLY|O_NOCTTY|O_CLOEXEC|O_NONBLOCK, 0);
+        if (index >= nrealpipe) {
+            pipe_fd[0] = open_checked(
+                pipe->src, O_RDWR|O_NOCTTY|O_CLOEXEC|O_CREAT|O_EXCL, 0600);
+        } else {
+            if (mkfifo(pipe->src, 0600) == -1)
+                fail(kStatusInternalError,
+                    "Creating fifo '%s': %s", pipe->src, strerror(errno));
+            pipe_fd[0] = open_checked(
+                pipe->src, O_RDONLY|O_NOCTTY|O_CLOEXEC|O_NONBLOCK, 0);
+        }
         if (pipe->as_stdout || pipe->as_stderr)
             pipe_fd[1] = open_checked(
                 pipe->src, O_WRONLY|O_NOCTTY|O_CLOEXEC, 0);
@@ -113,7 +119,7 @@ static void create_pipes(
     size_t npipes, sizefds;
     struct cmsghdr *cmsghdr;
 
-    npipes = pipe_count(request);
+    npipes = pipe_count(request, &nrealpipe);
     sizefds = sizeof(int)*(npipes + (request->stdstreams_dest!=NULL));
 
     if (!sizefds) return;
