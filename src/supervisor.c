@@ -81,9 +81,6 @@ static void sink_init(
 
     sink->handler = pipe->type == PIPE_STDSTREAMS ?
         stdstreams_pipe_init : regular_pipe_handler;
-
-    if (pipe->type == PIPE_COPYFILE)
-        s->ncopyfile++;
 }
 
 static bool cgroup_counter_nonzero(
@@ -186,7 +183,8 @@ static int do_spawnerout(struct sandals_supervisor *s) {
             s->pollfd[PIPE0_INDEX+i].fd = fd[i];
             s->pollfd[PIPE0_INDEX+i].events = POLLIN;
             s->pollfd[PIPE0_INDEX+i].revents = 0;
-        };
+            s->ncopyfile += (s->sink[i].pipe.type == PIPE_COPYFILE);
+        }
         s->npollfd = PIPE0_INDEX + s->npipe - s->ncopyfile;
         return 0;
     }
@@ -362,6 +360,7 @@ int supervisor(
     s.exiting = 0;
     s.request = request;
     s.npipe = pipe_count(request);
+    s.ncopyfile = 0;
     s.npollfd = PIPE0_INDEX;
     if (!(s.sink = malloc(sizeof(struct sandals_sink)*s.npipe
         +sizeof(struct pollfd)*(PIPE0_INDEX+s.npipe)
@@ -425,8 +424,7 @@ int supervisor(
 
     kill(spawner_pid, SIGKILL); spawner_pid = -1;
     s.exiting = 1;
-    if (s.npipe && s.pollfd[PIPE0_INDEX].fd) /* did recive fds */
-        s.npollfd = PIPE0_INDEX+s.npipe;
+    s.npollfd += s.ncopyfile; // finally process copyfile pipes
     do_pipes(&s);
     response_send(&s.response);
     return EXIT_SUCCESS;
