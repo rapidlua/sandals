@@ -63,3 +63,13 @@ test('copyFilesEarlyFailure', ()=>{
         copyFiles: [{dest: new TmpFile(), src: '/no-such-file-or-dir'}]
     });
 });
+
+test('copyFilesLimit', ()=>{
+    const output = new TmpFile();
+    fileLimit({
+        cmd: ['echo', '0123456789abcdef'],
+        mounts: [{type: 'tmpfs', dest: '/tmp'}],
+        copyFiles: [{src: '/tmp/output', dest: output, stdout: true, limit: 4}]
+    });
+    assert.equal(output.read(), '0123');
+});
