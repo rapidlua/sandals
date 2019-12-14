@@ -48,7 +48,7 @@ of cgroups v1. Sandals, on the other hand, takes advantage of cgroups v2.
 ## Installation
 
 ```
-$ make && make install && make install_helper
+$ make && make install
 ```
 
 ## User guide
@@ -209,8 +209,8 @@ Optional keys:
    Bits 0..30 encode the chunk length. Bit 31 tells whether the chunk origin is stdout (0) or stderr (1).
    
    **Note:** when the destination is a terminal standard streams in C library use less buffering.
-   A task should preload `/lib/sandals/stdstreams_helper.so` to get the same result. This must be
+   ~~A task should preload `/lib/sandals/stdstreams_helper.so` to get the same result. This must be
    arranged manually, either use `LD_PRELOAD`+`env` or `/etc/ld.so.preload`+`mounts`.
-   Run `make install_helper` to install `stdstreams_helper.so`.
+   Run `make install_helper` to install `stdstreams_helper.so`.~~
 
    **Note:** if size limit is exceeded the last packet (header + chunk) might be cut short.

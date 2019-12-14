@@ -425,7 +425,7 @@ int supervisor(
 
     kill(spawner_pid, SIGKILL); spawner_pid = -1;
     s.exiting = 1;
-    if (s.npipe && s.pollfd[PIPE0_INDEX].fd) /* did receive fds */
+    if (s.npipe && s.pollfd[PIPE0_INDEX].fd) /* did recive fds */
         s.npollfd = PIPE0_INDEX+s.npipe;
     do_pipes(&s);
     response_send(&s.response);
