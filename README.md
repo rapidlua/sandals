@@ -4,7 +4,7 @@ It is built using Linux namespaces, cgroups v2, and seccomp-bpf syscall filters.
 
 ```
 $ echo '{"cmd":["ps","-A"],
-         "pipes":[{"file":"/dev/stdout","stdout":true}],
+         "pipes":[{"dest":"/dev/stdout","stdout":true}],
          "mounts":[{"type":"proc","dest":"/proc"}]
         }' | sandals
   PID TTY          TIME CMD
