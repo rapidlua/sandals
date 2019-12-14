@@ -18,6 +18,7 @@
 #include <sys/un.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <arpa/inet.h>
 
 static const char signals[][10] = {
     [SIGABRT] = "SIGABRT",
@@ -54,45 +55,13 @@ static const char signals[][10] = {
     [SIGXFSZ] = "SIGXFSZ"
 };
 
+static int devproxyfd_fd;
 static int childstdout_fd;
 static int childstderr_fd;
-static int nrealpipe;
 
-static void make_pipe(
-    int index, const struct sandals_pipe *pipe, int fd[]) {
-
-    int pipe_fd[2];
-
-    if (pipe->src) {
-        if (index >= nrealpipe) {
-            pipe_fd[0] = open_checked(
-                pipe->src, O_RDWR|O_NOCTTY|O_CLOEXEC|O_CREAT|O_EXCL, 0600);
-        } else {
-            if (mkfifo(pipe->src, 0600) == -1)
-                fail(kStatusInternalError,
-                    "Creating fifo '%s': %s", pipe->src, strerror(errno));
-            pipe_fd[0] = open_checked(
-                pipe->src, O_RDONLY|O_NOCTTY|O_CLOEXEC|O_NONBLOCK, 0);
-        }
-        if (pipe->as_stdout || pipe->as_stderr)
-            pipe_fd[1] = open_checked(
-                pipe->src, O_WRONLY|O_NOCTTY|O_CLOEXEC, 0);
-    } else {
-        if (pipe2(pipe_fd, O_CLOEXEC) == -1)
-            fail(kStatusInternalError, "pipe2: %s", strerror(errno));
-        if (fcntl(pipe_fd[0], F_SETFL, O_NONBLOCK) == -1)
-            fail(kStatusInternalError, "fcntl(F_SETFL, O_NONBLOCK): %s",
-                strerror(errno));
-    }
-
-    if (pipe->as_stdout) childstdout_fd = pipe_fd[1];
-    if (pipe->as_stderr) childstderr_fd = pipe_fd[1];
-    fd[index] = pipe_fd[0];
-}
-
-static int make_socket(const void *addr, socklen_t addrlen) {
+static int create_socket(const void *addr, socklen_t addrlen) {
     struct sockaddr_un addr_un;
-    int fd = socket(AF_UNIX, SOCK_DGRAM, 0);
+    int fd = socket(AF_UNIX, SOCK_DGRAM|SOCK_CLOEXEC, 0);
     if (fd==-1) fail(kStatusInternalError, "socket: %s", strerror(errno));
     addr_un.sun_family = AF_UNIX;
     memcpy(addr_un.sun_path, addr, addrlen);
@@ -113,42 +82,115 @@ static void connect_checked(int fd, const void *addr, socklen_t addrlen) {
     ) fail(kStatusInternalError, "connect: %s", strerror(errno));
 }
 
+static void create_pipe(
+    int index, const struct sandals_pipe *pipe, int fd[]) {
+
+    int pipefd[2];
+
+    switch (pipe->type) {
+    case PIPE_STDSTREAMS:
+        if (devproxyfd_fd < 0) {
+            fd[index] = create_socket(kStdStreamsAddr, sizeof(kStdStreamsAddr));
+
+            childstdout_fd = create_socket(kStdoutAddr, sizeof(kStdoutAddr));
+
+            connect_checked(
+                childstdout_fd, kStdStreamsAddr, sizeof(kStdStreamsAddr));
+
+            childstderr_fd = create_socket(kStderrAddr, sizeof(kStderrAddr));
+
+            connect_checked(
+                childstderr_fd, kStdStreamsAddr, sizeof(kStdStreamsAddr));
+
+            return;
+        }
+
+        // utilize /dev/proxyfd
+        ssize_t st;
+        struct {
+            uint32_t flags;
+            uint32_t cookie;
+            uint32_t pipefd;
+        } r = { .flags = O_CLOEXEC };
+
+        if (pipe2(pipefd, O_CLOEXEC) == -1)
+            fail(kStatusInternalError, "pipe2: %s", strerror(errno));
+        if (fcntl(pipefd[0], F_SETFL, O_NONBLOCK) == -1)
+            fail(kStatusInternalError, "fcntl(F_SETFL, O_NONBLOCK): %s",
+                strerror(errno));
+
+        fd[index] = pipefd[0];
+        r.pipefd = pipefd[1];
+
+        if ((st = write(devproxyfd_fd, &r, sizeof(r))) < 0)
+            fail(kStatusInternalError,
+                "/dev/proxyfd failure: %s", strerror(errno));
+        childstdout_fd = (int)st;
+
+        r.cookie = htonl(UINT32_C(0x80000000));
+        if ((st = write(devproxyfd_fd, &r, sizeof(r))) < 0)
+            fail(kStatusInternalError,
+                "/dev/proxyfd failure: %s", strerror(errno));
+        childstderr_fd = (int)st;
+
+        return;
+
+    case PIPE_REGULAR:
+        if (pipe->src) {
+            if (mkfifo(pipe->src, 0600) == -1)
+                fail(kStatusInternalError,
+                    "Creating fifo '%s': %s", pipe->src, strerror(errno));
+            pipefd[0] = open_checked(
+                pipe->src, O_RDONLY|O_NOCTTY|O_CLOEXEC|O_NONBLOCK, 0);
+
+            if (pipe->as_stdout || pipe->as_stderr)
+                pipefd[1] = open_checked(
+                    pipe->src, O_WRONLY|O_NOCTTY|O_CLOEXEC, 0);
+        } else {
+            if (pipe2(pipefd, O_CLOEXEC) == -1)
+                fail(kStatusInternalError, "pipe2: %s", strerror(errno));
+            if (fcntl(pipefd[0], F_SETFL, O_NONBLOCK) == -1)
+                fail(kStatusInternalError, "fcntl(F_SETFL, O_NONBLOCK): %s",
+                    strerror(errno));
+        }
+        break;
+
+    case PIPE_COPYFILE:
+        pipefd[0] = open_checked(
+            pipe->src, O_RDWR|O_NOCTTY|O_CLOEXEC|O_CREAT|O_EXCL, 0600);
+
+        if (pipe->as_stdout || pipe->as_stderr)
+            pipefd[1] = open_checked(
+                pipe->src, O_WRONLY|O_NOCTTY|O_CLOEXEC, 0);
+        break;
+    }
+
+    fd[index] = pipefd[0];
+    if (pipe->as_stdout) childstdout_fd = pipefd[1];
+    if (pipe->as_stderr) childstderr_fd = pipefd[1];
+}
+
 static void create_pipes(
     const struct sandals_request *request, struct msghdr *msghdr) {
 
-    size_t npipes, sizefds;
+    size_t npipe, sizefd;
     struct cmsghdr *cmsghdr;
 
-    npipes = pipe_count(request, &nrealpipe);
-    sizefds = sizeof(int)*(npipes + (request->stdstreams_dest!=NULL));
+    npipe = pipe_count(request);
+    if (!npipe) return;
 
-    if (!sizefds) return;
+    sizefd = sizeof(int)*npipe;
+    msghdr->msg_controllen = CMSG_SPACE(sizefd);
 
-    if (!(msghdr->msg_control = malloc(
-        msghdr->msg_controllen = CMSG_SPACE(sizefds)))
-    ) fail(kStatusInternalError, "malloc");
+    if (!(msghdr->msg_control = malloc(msghdr->msg_controllen)))
+        fail(kStatusInternalError, "malloc");
 
     cmsghdr = CMSG_FIRSTHDR(msghdr);
     cmsghdr->cmsg_level = SOL_SOCKET;
     cmsghdr->cmsg_type = SCM_RIGHTS;
-    cmsghdr->cmsg_len = CMSG_LEN(sizefds);
+    cmsghdr->cmsg_len = CMSG_LEN(sizefd);
 
-    pipe_foreach(request, make_pipe, (int*)CMSG_DATA(cmsghdr));
-
-    if (request->stdstreams_dest) {
-        ((int*)CMSG_DATA(cmsghdr))[npipes] =
-            make_socket(kStdStreamsAddr, sizeof(kStdStreamsAddr));
-
-        childstdout_fd = make_socket(kStdoutAddr, sizeof(kStdoutAddr));
-
-        connect_checked(
-            childstdout_fd, kStdStreamsAddr, sizeof(kStdStreamsAddr));
-
-        childstderr_fd = make_socket(kStderrAddr, sizeof(kStderrAddr));
-
-        connect_checked(
-            childstderr_fd, kStdStreamsAddr, sizeof(kStdStreamsAddr));
-    }
+    pipe_foreach(request, create_pipe, (int*)CMSG_DATA(cmsghdr));
 }
 
 static void configure_seccomp(
@@ -178,6 +220,9 @@ int spawner(const struct sandals_request *request) {
     // open /dev/null, strictly before altering mounts
     devnull_fd = open_checked("/dev/null", O_CLOEXEC|O_RDWR|O_NOCTTY, 0);
     childstdout_fd = childstderr_fd = devnull_fd;
+
+    if (request->stdstreams_dest)
+        devproxyfd_fd = open("/dev/proxyfd", O_CLOEXEC|O_WRONLY|O_NOCTTY);
 
     // strictly before altering mounts - /proc may disappear
     // + do_mounts() requires configured uid/gid maps

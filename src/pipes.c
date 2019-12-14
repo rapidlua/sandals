@@ -4,14 +4,14 @@
 #include <string.h>
 #include <limits.h>
 
-int pipe_count(const struct sandals_request *request, int *real_count) {
+int pipe_count(const struct sandals_request *request) {
     const jstr_token_t *item;
-    int count;
-    *real_count = 0;
+    int count = 0;
+    if (request->stdstreams_dest)
+        count++;
     if (request->pipes) {
-        JSARRAY_FOREACH(request->pipes, item) (*real_count)++;
+        JSARRAY_FOREACH(request->pipes, item) count++;
     }
-    count = *real_count;
     if (request->copy_files) {
         JSARRAY_FOREACH(request->copy_files, item) count++;
     }
@@ -67,10 +67,23 @@ void pipe_foreach(
     const jstr_token_t *pipedef;
     int index = 0;
 
+    if (request->stdstreams_dest) {
+            struct sandals_pipe pipe = {
+                .type = PIPE_STDSTREAMS,
+                .dest = request->stdstreams_dest,
+                .limit = request->stdstreams_limit
+            };
+            fn(index++, &pipe, userdata);
+    }
+
     if (request->pipes) {
         JSARRAY_FOREACH(request->pipes, pipedef) {
 
-            struct sandals_pipe pipe = { .limit = LONG_MAX };
+            struct sandals_pipe pipe = {
+                .type = PIPE_REGULAR,
+                .limit = LONG_MAX
+            };
+
             pipe_init(request, pipedef, &pipe);
 
             if (!pipe.as_stdout && !pipe.as_stderr && !pipe.src)
@@ -84,7 +97,11 @@ void pipe_foreach(
     if (request->copy_files) {
         JSARRAY_FOREACH(request->copy_files, pipedef) {
 
-            struct sandals_pipe pipe = { .limit = LONG_MAX };
+            struct sandals_pipe pipe = {
+                .type = PIPE_COPYFILE,
+                .limit = LONG_MAX
+            };
+
             pipe_init(request, pipedef, &pipe);
 
             if (!pipe.src)

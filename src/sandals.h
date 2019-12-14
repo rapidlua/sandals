@@ -72,7 +72,14 @@ void do_mounts(const struct sandals_request *request);
 
 void map_user_and_group(const struct sandals_request *request);
 
+enum pipe_type {
+    PIPE_REGULAR,
+    PIPE_COPYFILE,
+    PIPE_STDSTREAMS
+};
+
 struct sandals_pipe {
+    enum pipe_type type;
     const char *dest;
     const char *src;
     bool as_stdout;
@@ -80,7 +87,7 @@ struct sandals_pipe {
     long limit;
 };
 
-int pipe_count(const struct sandals_request *request, int *);
+int pipe_count(const struct sandals_request *request);
 
 void pipe_foreach(
     const struct sandals_request *request, void(*fn)(), void *userdata);
