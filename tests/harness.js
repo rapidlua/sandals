@@ -54,19 +54,19 @@ function timeLimit(request) {
     return r;
 }
 
-function memoryLimit() {
+function memoryLimit(request) {
     const r = sandals(request);
     if (r.status != 'memoryLimit') assert.fail(r);
     return r;
 }
 
-function pidsLimit() {
+function pidsLimit(request) {
     const r = sandals(request);
     if (r.status != 'pidsLimit') assert.fail(r);
     return r;
 }
 
-function fileLimit() {
+function fileLimit(request) {
     const r = sandals(request);
     if (r.status != 'fileLimit') assert.fail(r);
     return r;

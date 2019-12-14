@@ -11,7 +11,7 @@ require('./mounts');
 // require('./env');
 // require('./workDir');
 // require('./timeLimit');
-// require('./pipes');
+require('./pipes');
 // require('./stdStreams');
 
 require('./security');
