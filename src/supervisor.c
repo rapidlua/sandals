@@ -218,7 +218,7 @@ static int do_pipes(struct sandals_supervisor *s) {
             if (rc) {
                 s->response.size = 0;
                 response_append_raw(&s->response, "{\"status\":\"");
-                response_append_esc(&s->response, kStatusFileLimit);
+                response_append_esc(&s->response, kStatusOutputLimit);
                 response_append_raw(&s->response, "\"}\n");
                 status = -1;
             }

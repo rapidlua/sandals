@@ -1,6 +1,6 @@
 const assert = require('assert');
 const {
-    test, requestInvalid, exited, internalError, fileLimit, TmpFile
+    test, requestInvalid, exited, internalError, outputLimit, TmpFile
 } = require('./harness');
 
 test('pipesInvalid', ()=>{
@@ -50,7 +50,7 @@ test('pipes3', ()=>{
 
 test('pipeslimit', ()=>{
     const output = new TmpFile();
-    fileLimit({
+    outputLimit({
         cmd: ['yes'],
         pipes: [{dest: output, stdout: true, limit: 10}]
     });
@@ -66,7 +66,7 @@ test('copyFilesEarlyFailure', ()=>{
 
 test('copyFilesLimit', ()=>{
     const output = new TmpFile();
-    fileLimit({
+    outputLimit({
         cmd: ['echo', '0123456789abcdef'],
         mounts: [{type: 'tmpfs', dest: '/tmp'}],
         copyFiles: [{src: '/tmp/output', dest: output, stdout: true, limit: 4}]

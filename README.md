@@ -82,7 +82,7 @@ JSON object with `status` key. Depending on the status aditional keys might be p
  * **memoryLimit**: memory limit as set by cgroup's `memory.max` exceeded
  * **pidsLimit**: pids limit as set by cgroup's `pids.max` exceeded
  * **timeLimit**: run time limit exceeded, see `timeLimit` in [Request](#Request) section
- * **fileLimit**: task output is written to a file; file size limit exceeded, see `pipes` in [Request](#Request) section
+ * **outputLimit**: task output size limit exceeded, see `pipes`, `copyFiles` and `stdStreams` in [Request](#Request) section
  * **requestInvalid**: request JSON invalid
     * **description**: error description
  * **internalError**: internal error
@@ -185,7 +185,7 @@ Optional keys:
    Chroot prefix (if any) is automatically prepended to the path in `src` key.
    
    Optional `limit` numeric key caps the maximum amount of collected data (no limit by default).
-   If the limit is exeeded, the task terminates with `status:fileLimit`.
+   If the limit is exeeded, the task terminates with `status:outputLimit`.
 
  * **copyFiles**: object []
 

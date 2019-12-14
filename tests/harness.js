@@ -66,9 +66,9 @@ function pidsLimit(request) {
     return r;
 }
 
-function fileLimit(request) {
+function outputLimit(request) {
     const r = sandals(request);
-    if (r.status != 'fileLimit') assert.fail(r);
+    if (r.status != 'outputLimit') assert.fail(r);
     return r;
 }
 
@@ -138,7 +138,7 @@ module.exports = {
     timeLimit,
     memoryLimit,
     pidsLimit,
-    fileLimit,
+    outputLimit,
     test,
     testAtExit: fn=>cleanupHandlers.push(fn),
     getInfo,
