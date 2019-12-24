@@ -207,10 +207,19 @@ Optional keys:
    
    Every chunk of data is prefixed with 32-bit integer in the network byte order.
    Bits 0..30 encode the chunk length. Bit 31 tells whether the chunk origin is stdout (0) or stderr (1).
-   
-   **Note:** when the destination is a terminal standard streams in C library use less buffering.
-   ~~A task should preload `/lib/sandals/stdstreams_helper.so` to get the same result. This must be
-   arranged manually, either use `LD_PRELOAD`+`env` or `/etc/ld.so.preload`+`mounts`.
-   Run `make install_helper` to install `stdstreams_helper.so`.~~
-
+      
    **Note:** if size limit is exceeded the last packet (header + chunk) might be cut short.
+
+   **Note:** *capturing task's output __exactly__ as it would appear if invoked in a terminal*, while
+   distinguishing stdout/stderr content, is tricky.
+   In most programming languages, if a stream is writing to a terminal, a different buffering strategy is used.
+   If the same pipe is attached to stdout and stderr, it won't be possible to tell which stream the particular
+   octet originated from. If two pipes are used, preserving relative ordering of chunks is challenging.
+   
+   The current implementation utilizes UNIX datagram sockets, which solve the ordering problem nicely.
+   The caveat is that any write to stdout/sdterr exceeding the maximum datagram size (~200KiB) will fail.
+   Also streams buffering doesn't match.
+   
+   If the perfect solution is desired, we suggest installing a custom Linux kernel module
+   ([available separately](https://github.com/mejedi/proxyfd)).
+   Sandals will use the kernel module if present.
